@@ -8,6 +8,7 @@ let currentWeaponIndex = 0;
 let playerHP = 100;
 const MAX_PLAYER_HP = 100;
 let isGameOver = false;
+let playerAvatar;
 
 const inventory = { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 };
 const TYPES = {
@@ -21,75 +22,11 @@ const TYPE_KEYS = Object.keys(TYPES);
 const enemyProjectiles = []; // 敵の弾
 const targets = [];
 
-const PLAYER_HEIGHT = 3.0;
-const PLAYER_SPEED = 15.0;
+const PLAYER_HEIGHT = 2.0;
+const PLAYER_SPEED = 10.0;
 
 const input = { moveX: 0, moveY: 0 };
-let camRotation = { x: 0, y: 0 };
-
-// --- クラス定義 ---
-
-// 敵の弾丸クラス
-class EnemyProjectile {
-    constructor(scene, startPos, targetPos) {
-        this.mesh = new THREE.Mesh(
-            new THREE.SphereGeometry(0.4, 8, 8),
-            new THREE.MeshStandardMaterial({ color: 0x220022 }) // 黒っぽい玉
-        );
-        this.mesh.position.copy(startPos);
-        scene.add(this.mesh);
-
-        // プレイヤーへ向けて発射
-        const dir = new THREE.Vector3().subVectors(targetPos, startPos).normalize();
-        this.velocity = dir.multiplyScalar(20.0); // 弾速
-        this.velocity.y += 5.0; // 少し山なり
-        this.active = true;
-        this.lifeTime = 3.0; // 3秒で消滅
-    }
-
-    update(dt, playerPos) {
-        if (!this.active) return false;
-
-        this.lifeTime -= dt;
-        if (this.lifeTime <= 0) {
-            this.dispose();
-            return false;
-        }
-
-        // 物理移動
-        this.velocity.y -= 20 * dt; // 重力
-        this.mesh.position.addScaledVector(this.velocity, dt);
-
-        // 地面
-        if (this.mesh.position.y < 0.5) {
-            this.dispose();
-            return false;
-        }
-
-        // プレイヤーとの当たり判定
-        // プレイヤーは camera.position (高さ3.0)
-        // 足元〜頭まで判定したいので、XZ距離で判定し、Yもある程度見る
-        const distXZ = Math.sqrt(
-            Math.pow(this.mesh.position.x - playerPos.x, 2) +
-            Math.pow(this.mesh.position.z - playerPos.z, 2)
-        );
-
-        if (distXZ < 1.0 && this.mesh.position.y < PLAYER_HEIGHT + 1 && this.mesh.position.y > 0) {
-            takePlayerDamage(10);
-            this.dispose();
-            return false;
-        }
-
-        return true;
-    }
-
-    dispose() {
-        this.active = false;
-        scene.remove(this.mesh);
-        this.mesh.geometry.dispose();
-        this.mesh.material.dispose();
-    }
-}
+let camRotation = { x: 0.2, y: 0 }; // Initial camera rotation
 
 const clientTargets = {};
 const clientMinions = {};
@@ -126,8 +63,6 @@ function init() {
     }
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, PLAYER_HEIGHT, 10);
-    camera.rotation.order = "YXZ";
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -136,10 +71,22 @@ function init() {
     document.getElementById('ui-layer').style.display = 'none';
 
     window.addEventListener('resize', onWindowResize);
+
+    document.querySelectorAll('.color-box').forEach(box => {
+        box.addEventListener('click', () => {
+            document.querySelector('.color-box.selected').classList.remove('selected');
+            box.classList.add('selected');
+        });
+    });
+
     document.getElementById('play-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value;
         if (username) {
-            socket.emit('initPlayer', { username });
+            const color = document.querySelector('.color-box.selected').dataset.color;
+            socket.emit('initPlayer', { username, color });
+            playerAvatar = createPlayerAvatar(color);
+            scene.add(playerAvatar);
+
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
             updateWeaponUI();
@@ -165,33 +112,33 @@ function init() {
     });
 
     socket.on('newPlayer', (playerInfo) => {
-        addOtherPlayer(playerInfo);
+        if (playerInfo.id !== socket.id) {
+            addOtherPlayer(playerInfo);
+        }
     });
 
     socket.on('playerDisconnected', (id) => {
         if (otherPlayers[id]) {
-            scene.remove(otherPlayers[id]);
+            scene.remove(otherPlayers[id].group);
             delete otherPlayers[id];
         }
     });
 
     socket.on('playerMoved', (playerInfo) => {
         if (otherPlayers[playerInfo.id]) {
-            otherPlayers[playerInfo.id].position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
-            otherPlayers[playerInfo.id].rotation.set(playerInfo.rotation.x, playerInfo.rotation.y, playerInfo.rotation.z);
+            otherPlayers[playerInfo.id].group.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+            otherPlayers[playerInfo.id].group.rotation.y = playerInfo.rotation.y;
         }
     });
 
-    function addOtherPlayer(playerInfo) {
+    function createPlayerAvatar(color) {
         const playerGroup = new THREE.Group();
-        playerGroup.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+        playerGroup.position.set(0, PLAYER_HEIGHT / 2, 10);
 
-        // Materials
         const skinMat = new THREE.MeshStandardMaterial({color: 0xffccaa});
-        const shirtMat = new THREE.MeshStandardMaterial({color: new THREE.Color().setHSL(Math.random(), 0.5, 0.5)});
-        const pantsMat = new THREE.MeshStandardMaterial({color: new THREE.Color().setHSL(Math.random(), 0.5, 0.2)});
+        const shirtMat = new THREE.MeshStandardMaterial({color: color || 0xffffff});
+        const pantsMat = new THREE.MeshStandardMaterial({color: 0x3333ff});
 
-        // Body parts
         const head = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skinMat);
         head.position.y = 1.5;
         playerGroup.add(head);
@@ -216,6 +163,12 @@ function init() {
         leg2.position.set(0.25, -1, 0);
         playerGroup.add(leg2);
 
+        return playerGroup;
+    }
+
+    function addOtherPlayer(playerInfo) {
+        const playerGroup = createPlayerAvatar(playerInfo.color);
+
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         context.font = 'Bold 20px Arial';
@@ -228,7 +181,7 @@ function init() {
         sprite.position.y = 2.5;
         playerGroup.add(sprite);
 
-        otherPlayers[playerInfo.id] = playerGroup;
+        otherPlayers[playerInfo.id] = { group: playerGroup };
         scene.add(playerGroup);
     }
 
@@ -333,7 +286,6 @@ function init() {
 
         return { mesh, hpGroup, hpBar };
     }
-
 }
 
 function updatePlayerHPUI() {
@@ -353,7 +305,6 @@ function takePlayerDamage(dmg) {
     playerHP -= dmg;
     updatePlayerHPUI();
 
-    // ダメージエフェクト
     const overlay = document.getElementById('damage-overlay');
     overlay.style.opacity = 0.5;
     setTimeout(() => { overlay.style.opacity = 0; }, 100);
@@ -437,7 +388,7 @@ function setupControls() {
         const sensitivity = 0.005;
         camRotation.y -= (t.clientX - lookStartX) * sensitivity;
         camRotation.x -= (t.clientY - lookStartY) * sensitivity;
-        camRotation.x = Math.max(-1.4, Math.min(1.4, camRotation.x));
+        camRotation.x = Math.max(-0.5, Math.min(1.4, camRotation.x));
         lookStartX = t.clientX; lookStartY = t.clientY;
     }, {passive: false});
 
@@ -484,9 +435,12 @@ function setupControls() {
         if (inventory[currentKey] > 0) {
             const camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
+
+            const startPos = playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+
             socket.emit('fire', {
                 type: currentKey,
-                position: camera.position,
+                position: startPos,
                 direction: camDir
             });
             inventory[currentKey]--;
@@ -535,10 +489,7 @@ function animate() {
     const dt = Math.min((time - prevTime) / 1000, 0.1);
     prevTime = time;
 
-    if(isGameOver) return;
-
-    camera.rotation.x = camRotation.x;
-    camera.rotation.y = camRotation.y;
+    if(isGameOver || !playerAvatar) return;
 
     if (input.moveX !== 0 || input.moveY !== 0) {
         const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
@@ -547,22 +498,32 @@ function animate() {
         moveDir.addScaledVector(forward, -input.moveY);
         moveDir.addScaledVector(right, input.moveX);
         moveDir.normalize();
-        camera.position.addScaledVector(moveDir, PLAYER_SPEED * dt);
 
-        socket.emit('playerMovement', {
-            position: camera.position,
-            rotation: { x: camera.rotation.x, y: camera.rotation.y, z: camera.rotation.z }
-        });
+        playerAvatar.position.addScaledVector(moveDir, PLAYER_SPEED * dt);
+        playerAvatar.rotation.y = Math.atan2(moveDir.x, moveDir.z);
     }
 
-    // 敵の弾更新
-    for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
-        const p = enemyProjectiles[i];
-        const alive = p.update(dt, camera.position);
-        if (!alive) {
-            enemyProjectiles.splice(i, 1);
-        }
+    // Camera follow
+    const idealOffset = new THREE.Vector3(0, 5, 8);
+    idealOffset.applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y);
+    idealOffset.applyAxisAngle(new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y), camRotation.x);
+    const idealCamPos = playerAvatar.position.clone().add(idealOffset);
+
+    // Obstacle check
+    const raycaster = new THREE.Raycaster(playerAvatar.position.clone().add(new THREE.Vector3(0,1,0)), idealCamPos.clone().sub(playerAvatar.position).normalize());
+    const intersects = raycaster.intersectObjects(scene.children);
+    if(intersects.length > 0 && intersects[0].distance < idealOffset.length()) {
+        camera.position.copy(intersects[0].point);
+    } else {
+        camera.position.lerp(idealCamPos, 0.1);
     }
+
+    camera.lookAt(playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+
+    socket.emit('playerMovement', {
+        position: playerAvatar.position,
+        rotation: { x: 0, y: playerAvatar.rotation.y, z: 0 }
+    });
 
     renderer.render(scene, camera);
 }

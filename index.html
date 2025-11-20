@@ -158,6 +158,27 @@
             width: 200px;
             margin-bottom: 20px;
         }
+        #color-selector {
+            margin-bottom: 20px;
+        }
+        #color-selector p {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+        .color-box {
+            width: 30px;
+            height: 30px;
+            border: 2px solid #555;
+            display: inline-block;
+            cursor: pointer;
+            margin: 0 5px;
+            border-radius: 5px;
+        }
+        .color-box.selected {
+            border-color: #0ff;
+            box-shadow: 0 0 10px #0ff;
+        }
         #play-button {
             padding: 10px 40px;
             font-size: 20px;
@@ -294,6 +315,14 @@
         <h1>MINION FPS: ONLINE</h1>
         <p>Enter the world of minions and conquer your enemies.</p>
         <input type="text" id="username-input" placeholder="Enter username">
+        <div id="color-selector">
+            <p>Choose your avatar color:</p>
+            <div class="color-box selected" style="background-color: #ff0000;" data-color="#ff0000"></div>
+            <div class="color-box" style="background-color: #00ff00;" data-color="#00ff00"></div>
+            <div class="color-box" style="background-color: #0000ff;" data-color="#0000ff"></div>
+            <div class="color-box" style="background-color: #ffff00;" data-color="#ffff00"></div>
+            <div class="color-box" style="background-color: #ff00ff;" data-color="#ff00ff"></div>
+        </div>
         <button id="play-button" disabled>Connecting...</button>
     </div>
 

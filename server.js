@@ -202,6 +202,7 @@ io.on('connection', (socket) => {
         players[socket.id] = {
             id: socket.id,
             username: data.username,
+            color: data.color,
             position: { x: 0, y: 3.0, z: 10 },
             rotation: { x: 0, y: 0, z: 0 },
             score: 0,
