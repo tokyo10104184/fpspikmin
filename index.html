@@ -207,9 +207,11 @@
         <button id="retry-btn">RETRY</button>
     </div>
 
+    <script src="/socket.io/socket.io.js"></script>
     <script type="module">
         import * as THREE from 'https://unpkg.com/three@0.150.0/build/three.module.js';
 
+        const socket = io();
         let camera, scene, renderer;
         let prevTime = performance.now();
         
@@ -218,6 +220,69 @@
         let playerHP = 100;
         const MAX_PLAYER_HP = 100;
         let isGameOver = false;
+
+        // Multiplayer variables
+        const otherPlayers = {};
+
+        socket.on('connect', () => {
+            console.log('Connected to server!', socket.id);
+        });
+
+        socket.on('currentPlayers', (players) => {
+            Object.keys(players).forEach((id) => {
+                if (id !== socket.id) {
+                    const playerData = players[id];
+                    addOtherPlayer(playerData);
+                }
+            });
+        });
+
+        socket.on('newPlayer', (playerData) => {
+            addOtherPlayer(playerData);
+        });
+
+        socket.on('playerDisconnected', (id) => {
+            if (otherPlayers[id]) {
+                scene.remove(otherPlayers[id].mesh);
+                // TODO: Also need to dispose geometries and materials
+                delete otherPlayers[id];
+            }
+        });
+
+        socket.on('playerMoved', (playerData) => {
+            if (otherPlayers[playerData.id]) {
+                otherPlayers[playerData.id].mesh.position.copy(playerData.position);
+                // Note: camera rotation is YXZ, so we just care about the Y for the body.
+                otherPlayers[playerData.id].mesh.rotation.y = playerData.rotation.y;
+                // Maybe rotate head on X axis?
+                const head = otherPlayers[playerData.id].mesh.children[0];
+                if(head) head.rotation.x = playerData.rotation.x;
+            }
+        });
+
+        function addOtherPlayer(playerData) {
+            // Using a simplified version of the Target mesh for now
+            const playerGroup = new THREE.Group();
+            playerGroup.position.copy(playerData.position);
+            scene.add(playerGroup);
+
+            const skinMat = new THREE.MeshStandardMaterial({color: 0x00ff00}); // Green to differentiate
+            const shirtMat = new THREE.MeshStandardMaterial({color: 0xff8800});
+
+            const head = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skinMat);
+            head.position.y = 3.0;
+            playerGroup.add(head);
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), shirtMat);
+            body.position.y = 1.75;
+            playerGroup.add(body);
+
+            otherPlayers[playerData.id] = {
+                id: playerData.id,
+                mesh: playerGroup
+            };
+            console.log("Added other player:", playerData.id);
+        }
 
         const inventory = { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 };
         const TYPES = {
@@ -237,6 +302,8 @@
         
         const input = { moveX: 0, moveY: 0 };
         let camRotation = { x: 0, y: 0 };
+        let lastSentTime = 0;
+        let lastSentRotation = { x: 0, y: 0 };
 
         // --- クラス定義 ---
 
@@ -863,6 +930,20 @@
             const time = performance.now();
             const dt = Math.min((time - prevTime) / 1000, 0.1);
             prevTime = time;
+
+            // Emit player movement
+            if (socket && socket.connected && (input.moveX !== 0 || input.moveY !== 0 || lastSentRotation.x !== camRotation.x || lastSentRotation.y !== camRotation.y)) {
+                // Throttle updates to ~30 times per second
+                if (time - lastSentTime > 33) {
+                    socket.emit('playerMovement', {
+                        position: camera.position,
+                        rotation: {x: camRotation.x, y: camRotation.y, z: 0} // z is not used
+                    });
+                    lastSentTime = time;
+                    lastSentRotation.x = camRotation.x;
+                    lastSentRotation.y = camRotation.y;
+                }
+            }
 
             if(isGameOver) return;
 
