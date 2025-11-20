@@ -96,6 +96,7 @@ class ServerTarget {
             if (players[ownerId]) {
                 players[ownerId].score += 100;
                 io.to(ownerId).emit('updateScore', { score: players[ownerId].score });
+                updateLeaderboard();
             }
         }
     }
@@ -120,6 +121,15 @@ for (let i = 0; i < NUM_TARGETS; i++) {
 
 // Main Game Loop
 let lastUpdateTime = Date.now();
+
+function updateLeaderboard() {
+    const leaderboard = Object.values(players)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10)
+        .map(p => ({ username: p.username, score: p.score }));
+    io.emit('updateLeaderboard', leaderboard);
+}
+
 setInterval(() => {
     const now = Date.now();
     const dt = (now - lastUpdateTime) / 1000;
@@ -203,12 +213,14 @@ io.on('connection', (socket) => {
 
         socket.emit('currentPlayers', players);
         socket.broadcast.emit('newPlayer', players[socket.id]);
+        updateLeaderboard();
     });
 
     socket.on('disconnect', () => {
         console.log('user disconnected:', socket.id);
         delete players[socket.id];
         io.emit('playerDisconnected', socket.id);
+        updateLeaderboard();
     });
 
     socket.on('playerMovement', (movementData) => {
@@ -249,6 +261,7 @@ io.on('connection', (socket) => {
             player.inventory[data.item] += data.quantity;
             socket.emit('updateScore', { score: player.score });
             socket.emit('updateInventory', { inventory: player.inventory });
+            updateLeaderboard();
         }
     });
 
@@ -271,6 +284,13 @@ io.on('connection', (socket) => {
             socket.emit('updateInventory', { inventory: player.inventory });
 
             io.emit('newPlayer', player);
+        }
+    });
+
+    socket.on('chatMessage', (msg) => {
+        const player = players[socket.id];
+        if (player) {
+            io.emit('chatMessage', { username: player.username, message: msg });
         }
     });
 });

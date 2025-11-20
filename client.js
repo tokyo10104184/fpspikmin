@@ -93,12 +93,15 @@ class EnemyProjectile {
 
 const clientTargets = {};
 const clientMinions = {};
+let socket;
+const otherPlayers = {};
 
 init();
 setupControls();
 animate();
 
 function init() {
+    socket = io();
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.Fog(0x87CEEB, 0, 80);
@@ -125,19 +128,19 @@ function init() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(renderer.domElement);
 
+    document.getElementById('ui-layer').style.display = 'none';
+
     window.addEventListener('resize', onWindowResize);
     document.getElementById('play-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value;
         if (username) {
             socket.emit('initPlayer', { username });
             document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'block';
         }
     });
 
     document.getElementById('retry-btn').addEventListener('click', resetGame);
-
-    const socket = io();
-    const otherPlayers = {};
 
     socket.on('playerDamaged', (data) => {
         takePlayerDamage(data.damage);
@@ -170,10 +173,38 @@ function init() {
     });
 
     function addOtherPlayer(playerInfo) {
-        const geometry = new THREE.BoxGeometry(1, 2, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-        const otherPlayer = new THREE.Mesh(geometry, material);
-        otherPlayer.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+        const playerGroup = new THREE.Group();
+        playerGroup.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+
+        // Materials
+        const skinMat = new THREE.MeshStandardMaterial({color: 0xffccaa});
+        const shirtMat = new THREE.MeshStandardMaterial({color: new THREE.Color().setHSL(Math.random(), 0.5, 0.5)});
+        const pantsMat = new THREE.MeshStandardMaterial({color: new THREE.Color().setHSL(Math.random(), 0.5, 0.2)});
+
+        // Body parts
+        const head = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skinMat);
+        head.position.y = 1.5;
+        playerGroup.add(head);
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), shirtMat);
+        body.position.y = 0.25;
+        playerGroup.add(body);
+
+        const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.5, 0.4), skinMat);
+        arm1.position.set(-0.7, 0.25, 0);
+        playerGroup.add(arm1);
+
+        const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.5, 0.4), skinMat);
+        arm2.position.set(0.7, 0.25, 0);
+        playerGroup.add(arm2);
+
+        const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), pantsMat);
+        leg1.position.set(-0.25, -1, 0);
+        playerGroup.add(leg1);
+
+        const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), pantsMat);
+        leg2.position.set(0.25, -1, 0);
+        playerGroup.add(leg2);
 
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
@@ -184,11 +215,11 @@ function init() {
 
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.y = 1.5;
-        otherPlayer.add(sprite);
+        sprite.position.y = 2.5;
+        playerGroup.add(sprite);
 
-        otherPlayers[playerInfo.id] = otherPlayer;
-        scene.add(otherPlayer);
+        otherPlayers[playerInfo.id] = playerGroup;
+        scene.add(playerGroup);
     }
 
     socket.on('targetsUpdate', (targetsState) => {
@@ -259,6 +290,16 @@ function init() {
     socket.on('updateInventory', (data) => {
         Object.assign(inventory, data.inventory);
         updateWeaponUI();
+    });
+
+    socket.on('updateLeaderboard', (leaderboard) => {
+        const list = document.getElementById('leaderboard-list');
+        list.innerHTML = '';
+        leaderboard.forEach(p => {
+            const item = document.createElement('li');
+            item.textContent = `${p.username}: ${p.score}`;
+            list.appendChild(item);
+        });
     });
 
     function createTargetMesh() {
@@ -457,6 +498,22 @@ function setupControls() {
         setTimeout(() => { msg.style.display = 'none'; }, 1000);
     };
     callBtn.addEventListener('touchstart', callAction); callBtn.addEventListener('mousedown', callAction);
+
+    const chatInput = document.getElementById('chat-input');
+    chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && chatInput.value) {
+            socket.emit('chatMessage', chatInput.value);
+            chatInput.value = '';
+        }
+    });
+
+    socket.on('chatMessage', (data) => {
+        const messages = document.getElementById('chat-messages');
+        const msgElement = document.createElement('div');
+        msgElement.textContent = `${data.username}: ${data.message}`;
+        messages.appendChild(msgElement);
+        messages.scrollTop = messages.scrollHeight;
+    });
 }
 
 function onWindowResize() {
