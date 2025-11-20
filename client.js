@@ -100,6 +100,13 @@ init();
 
 function init() {
     socket = io();
+
+    socket.on('connect', () => {
+        const playButton = document.getElementById('play-button');
+        playButton.disabled = false;
+        playButton.textContent = 'PLAY';
+    });
+
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
     scene.fog = new THREE.Fog(0x87CEEB, 0, 80);
