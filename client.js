@@ -113,7 +113,9 @@ function init() {
 
     socket.on('newPlayer', (playerInfo) => {
         if (playerInfo.id !== socket.id) {
-            addOtherPlayer(playerInfo);
+            if (!playerInfo.isDead) {
+                addOtherPlayer(playerInfo);
+            }
         }
     });
 
@@ -121,6 +123,12 @@ function init() {
         if (otherPlayers[id]) {
             scene.remove(otherPlayers[id].group);
             delete otherPlayers[id];
+        }
+    });
+
+    socket.on('playerDied', (data) => {
+        if (otherPlayers[data.id]) {
+            otherPlayers[data.id].group.visible = false;
         }
     });
 
@@ -168,6 +176,7 @@ function init() {
 
     function addOtherPlayer(playerInfo) {
         const playerGroup = createPlayerAvatar(playerInfo.color);
+        playerGroup.visible = !playerInfo.isDead;
 
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
@@ -184,12 +193,6 @@ function init() {
         otherPlayers[playerInfo.id] = { group: playerGroup };
         scene.add(playerGroup);
     }
-
-    socket.on('targetsUpdate', (targetsState) => {
-        for (const id in targetsState) {
-            updateTarget(targetsState[id]);
-        }
-    });
 
     function updateTarget(targetState) {
         let target = clientTargets[targetState.id];
@@ -316,6 +319,7 @@ function takePlayerDamage(dmg) {
 
 function gameOver() {
     isGameOver = true;
+    if (playerAvatar) playerAvatar.visible = false;
     socket.emit('playerDied');
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over-screen').style.display = 'flex';
@@ -325,6 +329,12 @@ function resetGame() {
     socket.emit('requestRespawn');
     document.getElementById('game-over-screen').style.display = 'none';
     isGameOver = false;
+    playerHP = MAX_PLAYER_HP;
+    updatePlayerHPUI();
+    if (playerAvatar) {
+        playerAvatar.visible = true;
+        playerAvatar.position.set(0, PLAYER_HEIGHT / 2, 10);
+    }
 }
 
 function updateShopUI() {

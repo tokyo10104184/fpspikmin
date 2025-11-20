@@ -92,13 +92,24 @@ class ServerTarget {
         if (this.hp <= 0) {
             this.hp = 0;
             this.active = false;
-            // Respawn can be handled here
+
+            // Respawn after 5 seconds
+            setTimeout(() => this.respawn(), 5000);
+
             if (players[ownerId]) {
                 players[ownerId].score += 100;
                 io.to(ownerId).emit('updateScore', { score: players[ownerId].score });
                 updateLeaderboard();
             }
         }
+    }
+
+    respawn() {
+        this.hp = this.maxHp;
+        this.active = true;
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30 + Math.random() * 20;
+        this.position = { x: Math.cos(angle) * dist, y: 0, z: Math.sin(angle) * dist };
     }
 
     getState() {
@@ -269,7 +280,7 @@ io.on('connection', (socket) => {
     socket.on('playerDied', () => {
         if (players[socket.id]) {
             players[socket.id].isDead = true;
-            io.emit('playerDisconnected', socket.id);
+            io.emit('playerDied', { id: socket.id });
         }
     });
 
