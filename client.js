@@ -97,8 +97,6 @@ let socket;
 const otherPlayers = {};
 
 init();
-setupControls();
-animate();
 
 function init() {
     socket = io();
@@ -137,6 +135,11 @@ function init() {
             socket.emit('initPlayer', { username });
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
+            updateWeaponUI();
+            updateShopUI();
+            updatePlayerHPUI();
+            setupControls();
+            animate();
         }
     });
 
@@ -324,9 +327,6 @@ function init() {
         return { mesh, hpGroup, hpBar };
     }
 
-    updateWeaponUI();
-    updateShopUI();
-    updatePlayerHPUI();
 }
 
 function updatePlayerHPUI() {
