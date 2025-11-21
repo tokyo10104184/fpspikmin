@@ -64,6 +64,7 @@ function init() {
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 5, 18); // Set a stable initial camera position
+    camera.rotation.order = "YXZ";
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -396,18 +397,47 @@ function setupControls() {
 
     const lookZone = document.getElementById('touch-look-zone');
     let lookStartX = 0, lookStartY = 0;
+    let lookTouchIdentifier = null;
+
     lookZone.addEventListener('touchstart', (e) => {
-        lookStartX = e.changedTouches[0].clientX; lookStartY = e.changedTouches[0].clientY;
-    }, {passive: false});
+        if (lookTouchIdentifier === null) {
+            const touch = e.changedTouches[0];
+            lookTouchIdentifier = touch.identifier;
+            lookStartX = touch.clientX;
+            lookStartY = touch.clientY;
+        }
+    }, { passive: false });
+
     lookZone.addEventListener('touchmove', (e) => {
         e.preventDefault();
-        const t = e.changedTouches[0];
-        const sensitivity = 0.005;
-        camRotation.y -= (t.clientX - lookStartX) * sensitivity;
-        camRotation.x += (t.clientY - lookStartY) * sensitivity; // Un-inverted
-        camRotation.x = Math.max(-1.4, Math.min(1.4, camRotation.x));
-        lookStartX = t.clientX; lookStartY = t.clientY;
-    }, {passive: false});
+        if (lookTouchIdentifier !== null) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (t.identifier === lookTouchIdentifier) {
+                    const sensitivity = 0.005;
+                    camRotation.y -= (t.clientX - lookStartX) * sensitivity;
+                    camRotation.x -= (t.clientY - lookStartY) * sensitivity; // Un-inverted
+                    camRotation.x = Math.max(-1.4, Math.min(1.4, camRotation.x));
+                    lookStartX = t.clientX;
+                    lookStartY = t.clientY;
+                    break;
+                }
+            }
+        }
+    }, { passive: false });
+
+    const endLook = (e) => {
+        if (lookTouchIdentifier !== null) {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === lookTouchIdentifier) {
+                    lookTouchIdentifier = null;
+                    break;
+                }
+            }
+        }
+    };
+    lookZone.addEventListener('touchend', endLook, { passive: false });
+    lookZone.addEventListener('touchcancel', endLook, { passive: false });
 
     document.getElementById('ws-prev').addEventListener('click', () => {
         currentWeaponIndex = (currentWeaponIndex - 1 + TYPE_KEYS.length) % TYPE_KEYS.length;
@@ -491,6 +521,13 @@ function setupControls() {
         msgElement.textContent = `${data.username}: ${data.message}`;
         messages.appendChild(msgElement);
         messages.scrollTop = messages.scrollHeight;
+    });
+
+    const hudToggleButton = document.getElementById('hud-toggle');
+    const hudContainer = document.getElementById('collapsible-hud');
+
+    hudToggleButton.addEventListener('click', () => {
+        hudContainer.classList.toggle('collapsed');
     });
 }
 
