@@ -87,6 +87,7 @@ function init() {
             const color = document.querySelector('.color-box.selected').dataset.color;
             socket.emit('initPlayer', { username, color });
             playerAvatar = createPlayerAvatar(color);
+            playerAvatar.visible = false; // Hide self avatar for first-person
             scene.add(playerAvatar);
 
             document.getElementById('start-screen').style.display = 'none';
@@ -140,6 +141,7 @@ function init() {
     socket.on('playerMoved', (playerInfo) => {
         if (otherPlayers[playerInfo.id]) {
             otherPlayers[playerInfo.id].group.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+            // We now receive camera's y-rotation, which corresponds to the avatar's direction
             otherPlayers[playerInfo.id].group.rotation.y = playerInfo.rotation.y;
         }
     });
@@ -517,20 +519,19 @@ function animate() {
             playerAvatar.rotation.y = Math.atan2(moveDir.x, moveDir.z);
         }
 
-        // Camera follow
-        const idealOffset = new THREE.Vector3(0, 5, 8);
-        idealOffset.applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y);
-        idealOffset.applyAxisAngle(new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y), camRotation.x);
-        const idealCamPos = playerAvatar.position.clone().add(idealOffset);
-
-        // Simplified camera positioning
-        camera.position.copy(idealCamPos);
-        camera.lookAt(playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+        // First-person camera logic
+        camera.position.copy(playerAvatar.position);
+        camera.rotation.set(camRotation.x, camRotation.y, 0);
 
         socket.emit('playerMovement', {
             position: playerAvatar.position,
-            rotation: { x: 0, y: playerAvatar.rotation.y, z: 0 }
+            rotation: { x: 0, y: camRotation.y, z: 0 } // Send camera rotation
         });
+
+        // Update coordinates UI
+        const coords = playerAvatar.position;
+        document.getElementById('coordinates').textContent =
+            `X: ${coords.x.toFixed(2)} Y: ${coords.y.toFixed(2)} Z: ${coords.z.toFixed(2)}`;
     }
 
     renderer.render(scene, camera);

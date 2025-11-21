@@ -17,7 +17,7 @@ const targets = {};
 const minions = {};
 
 // Game constants
-const NUM_TARGETS = 4;
+const NUM_TARGETS = 3;
 const ITEM_COSTS = {
     NORMAL: 5,
     FROST: 20,
@@ -40,50 +40,16 @@ class ServerTarget {
         this.baseSpeed = 4.0;
         this.attackTimer = Math.random() * 3;
 
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 30 + Math.random() * 20;
-        this.position = { x: Math.cos(angle) * dist, y: 0, z: Math.sin(angle) * dist };
+        this.position = {
+            x: Math.random() * 20 - 10,
+            y: 0,
+            z: Math.random() * 20 - 10
+        };
         this.rotationY = 0;
     }
 
     update(dt, players) {
-        if (!this.active) return;
-
-        let nearestPlayer = null;
-        let minDistance = Infinity;
-        for (const playerId in players) {
-            const player = players[playerId];
-            if (!player.isDead) {
-                const dx = player.position.x - this.position.x;
-                const dz = player.position.z - this.position.z;
-                const dist = Math.sqrt(dx*dx + dz*dz);
-                if (dist < minDistance) {
-                    minDistance = dist;
-                    nearestPlayer = player;
-                }
-            }
-        }
-
-        if (nearestPlayer) {
-            if (minDistance > 5.0) { // Move towards player
-                const dx = nearestPlayer.position.x - this.position.x;
-                const dz = nearestPlayer.position.z - this.position.z;
-                const angle = Math.atan2(dx, dz);
-
-                this.position.x += (dx / minDistance) * this.baseSpeed * dt;
-                this.position.z += (dz / minDistance) * this.baseSpeed * dt;
-                this.rotationY = angle;
-            }
-
-            this.attackTimer += dt;
-            if (this.attackTimer >= 3.0 && minDistance < 30) {
-                this.attackTimer = 0;
-                const targetSocket = io.sockets.sockets.get(nearestPlayer.id);
-                if (targetSocket) {
-                    targetSocket.emit('playerDamaged', { damage: 10 });
-                }
-            }
-        }
+        // AI logic disabled
     }
 
     hit(damage, ownerId) {
@@ -107,9 +73,11 @@ class ServerTarget {
     respawn() {
         this.hp = this.maxHp;
         this.active = true;
-        const angle = Math.random() * Math.PI * 2;
-        const dist = 30 + Math.random() * 20;
-        this.position = { x: Math.cos(angle) * dist, y: 0, z: Math.sin(angle) * dist };
+        this.position = {
+            x: Math.random() * 20 - 10,
+            y: 0,
+            z: Math.random() * 20 - 10
+        };
     }
 
     getState() {
