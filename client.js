@@ -404,8 +404,8 @@ function setupControls() {
         const t = e.changedTouches[0];
         const sensitivity = 0.005;
         camRotation.y -= (t.clientX - lookStartX) * sensitivity;
-        camRotation.x -= (t.clientY - lookStartY) * sensitivity;
-        camRotation.x = Math.max(-0.5, Math.min(1.4, camRotation.x));
+        camRotation.x += (t.clientY - lookStartY) * sensitivity; // Un-inverted
+        camRotation.x = Math.max(-1.4, Math.min(1.4, camRotation.x));
         lookStartX = t.clientX; lookStartY = t.clientY;
     }, {passive: false});
 
@@ -453,7 +453,7 @@ function setupControls() {
             const camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
 
-            const startPos = playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+            const startPos = camera.position.clone();
 
             socket.emit('fire', {
                 type: currentKey,
@@ -521,6 +521,7 @@ function animate() {
 
         // First-person camera logic
         camera.position.copy(playerAvatar.position);
+        camera.position.y += 1.5; // Raise camera to eye level
         camera.rotation.set(camRotation.x, camRotation.y, 0);
 
         socket.emit('playerMovement', {

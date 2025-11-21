@@ -121,17 +121,18 @@ setInterval(() => {
     for (const minionId in minions) {
         const minion = minions[minionId];
 
-        minion.velocity.y -= 30 * dt;
-        minion.position.x += minion.velocity.x * dt;
-        minion.position.y += minion.velocity.y * dt;
-        minion.position.z += minion.velocity.z * dt;
+        if (minion.state === 'airborne') {
+            minion.velocity.y -= 30 * dt;
+            minion.position.x += minion.velocity.x * dt;
+            minion.position.y += minion.velocity.y * dt;
+            minion.position.z += minion.velocity.z * dt;
 
-        let hit = false;
+            let hit = false;
 
-        if (minion.position.y < 0.5) {
-            hit = true; // Hit the ground
-        } else {
-            for (const targetId in targets) {
+            if (minion.position.y < 0.5) {
+                hit = true; // Hit the ground
+            } else {
+                for (const targetId in targets) {
                 const target = targets[targetId];
                 if (target.active) {
                     const dx = minion.position.x - target.position.x;
@@ -158,8 +159,10 @@ setInterval(() => {
             }
         }
 
-        if (hit) {
-            delete minions[minionId];
+            if (hit) {
+                minion.state = 'grounded';
+                minion.velocity = { x: 0, y: 0, z: 0 };
+            }
         }
     }
 
@@ -212,6 +215,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('recallMinions', () => {
+        const player = players[socket.id];
+        if (!player) return;
+
+        for (const minionId in minions) {
+            if (minions[minionId].ownerId === socket.id) {
+                const minionType = minions[minionId].type;
+                if (player.inventory[minionType] !== undefined) {
+                    player.inventory[minionType]++;
+                }
+                delete minions[minionId];
+            }
+        }
+
+        socket.emit('updateInventory', { inventory: player.inventory });
+    });
+
     socket.on('fire', (data) => {
         const player = players[socket.id];
         if (player && !player.isDead && player.inventory[data.type] > 0) {
@@ -222,6 +242,7 @@ io.on('connection', (socket) => {
                 id: minionId,
                 ownerId: socket.id,
                 type: data.type,
+                state: 'airborne', // New state property
                 position: { ...data.position },
                 velocity: {
                     x: data.direction.x * 40,
