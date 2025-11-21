@@ -63,6 +63,7 @@ function init() {
     }
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 18); // Set a stable initial camera position
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -71,6 +72,7 @@ function init() {
     document.getElementById('ui-layer').style.display = 'none';
 
     window.addEventListener('resize', onWindowResize);
+    animate(); // Start the rendering loop immediately
 
     document.querySelectorAll('.color-box').forEach(box => {
         box.addEventListener('click', () => {
@@ -93,7 +95,6 @@ function init() {
             updateShopUI();
             updatePlayerHPUI();
             setupControls();
-            animate();
         }
     });
 
@@ -113,7 +114,11 @@ function init() {
 
     socket.on('newPlayer', (playerInfo) => {
         if (playerInfo.id !== socket.id) {
-            if (!playerInfo.isDead) {
+            if (otherPlayers[playerInfo.id]) {
+                // Player already exists, just make them visible
+                otherPlayers[playerInfo.id].group.visible = !playerInfo.isDead;
+            } else if (!playerInfo.isDead) {
+                // New player, create avatar
                 addOtherPlayer(playerInfo);
             }
         }
@@ -499,41 +504,34 @@ function animate() {
     const dt = Math.min((time - prevTime) / 1000, 0.1);
     prevTime = time;
 
-    if(isGameOver || !playerAvatar) return;
+    if (!isGameOver && playerAvatar) {
+        if (input.moveX !== 0 || input.moveY !== 0) {
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
+            const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
+            const moveDir = new THREE.Vector3();
+            moveDir.addScaledVector(forward, -input.moveY);
+            moveDir.addScaledVector(right, input.moveX);
+            moveDir.normalize();
 
-    if (input.moveX !== 0 || input.moveY !== 0) {
-        const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
-        const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
-        const moveDir = new THREE.Vector3();
-        moveDir.addScaledVector(forward, -input.moveY);
-        moveDir.addScaledVector(right, input.moveX);
-        moveDir.normalize();
+            playerAvatar.position.addScaledVector(moveDir, PLAYER_SPEED * dt);
+            playerAvatar.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+        }
 
-        playerAvatar.position.addScaledVector(moveDir, PLAYER_SPEED * dt);
-        playerAvatar.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+        // Camera follow
+        const idealOffset = new THREE.Vector3(0, 5, 8);
+        idealOffset.applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y);
+        idealOffset.applyAxisAngle(new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y), camRotation.x);
+        const idealCamPos = playerAvatar.position.clone().add(idealOffset);
+
+        // Simplified camera positioning
+        camera.position.copy(idealCamPos);
+        camera.lookAt(playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
+
+        socket.emit('playerMovement', {
+            position: playerAvatar.position,
+            rotation: { x: 0, y: playerAvatar.rotation.y, z: 0 }
+        });
     }
-
-    // Camera follow
-    const idealOffset = new THREE.Vector3(0, 5, 8);
-    idealOffset.applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y);
-    idealOffset.applyAxisAngle(new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), camRotation.y), camRotation.x);
-    const idealCamPos = playerAvatar.position.clone().add(idealOffset);
-
-    // Obstacle check
-    const raycaster = new THREE.Raycaster(playerAvatar.position.clone().add(new THREE.Vector3(0,1,0)), idealCamPos.clone().sub(playerAvatar.position).normalize());
-    const intersects = raycaster.intersectObjects(scene.children);
-    if(intersects.length > 0 && intersects[0].distance < idealOffset.length()) {
-        camera.position.copy(intersects[0].point);
-    } else {
-        camera.position.lerp(idealCamPos, 0.1);
-    }
-
-    camera.lookAt(playerAvatar.position.clone().add(new THREE.Vector3(0, 1.5, 0)));
-
-    socket.emit('playerMovement', {
-        position: playerAvatar.position,
-        rotation: { x: 0, y: playerAvatar.rotation.y, z: 0 }
-    });
 
     renderer.render(scene, camera);
 }
