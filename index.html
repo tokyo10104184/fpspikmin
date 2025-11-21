@@ -113,6 +113,14 @@
             position: absolute; top: 10px; left: 10px; color: white;
             font-family: monospace; font-size: 14px; text-shadow: 1px 1px 1px black;
         }
+        #hud-toggle {
+            position: absolute; bottom: 10px; right: 10px; z-index: 101;
+            padding: 8px 12px; font-size: 12px; background: rgba(0,0,0,0.5);
+            color: white; border: 1px solid white; border-radius: 5px; pointer-events: auto;
+        }
+        #collapsible-hud.collapsed > * {
+            display: none;
+        }
         .control-ui { pointer-events: auto; }
         #joystick-zone {
             position: absolute; bottom: 50px; left: 40px; width: 120px; height: 120px;
@@ -266,57 +274,61 @@
 
         <div id="score-board">$<span id="score-val">0</span></div>
 
-        <div id="shop-ui">
-            <div id="shop-toggle">SHOP ▲</div>
-            <div id="shop-list">
-                <div class="shop-row">
-                    <div class="shop-label" style="color:#ffaaaa">Normal</div>
-                    <div class="shop-btn" data-type="NORMAL" data-cost="5" data-mul="1"><div>x1</div><div>$5</div></div>
-                    <div class="shop-btn bulk" data-type="NORMAL" data-cost="5" data-mul="10"><div>x10</div><div>$50</div></div>
-                </div>
-                <div class="shop-row">
-                    <div class="shop-label" style="color:#aaffff">Frost</div>
-                    <div class="shop-btn" data-type="FROST" data-cost="20" data-mul="1"><div>x1</div><div>$20</div></div>
-                    <div class="shop-btn bulk" data-type="FROST" data-cost="20" data-mul="10"><div>x10</div><div>$200</div></div>
-                </div>
-                <div class="shop-row">
-                    <div class="shop-label" style="color:#aaffaa">Glue</div>
-                    <div class="shop-btn" data-type="GLUE" data-cost="30" data-mul="1"><div>x1</div><div>$30</div></div>
-                    <div class="shop-btn bulk" data-type="GLUE" data-cost="30" data-mul="10"><div>x10</div><div>$300</div></div>
-                </div>
-                <div class="shop-row">
-                    <div class="shop-label" style="color:#aaaaaa">Bomb</div>
-                    <div class="shop-btn" data-type="BOMB" data-cost="50" data-mul="1"><div>x1</div><div>$50</div></div>
-                    <div class="shop-btn bulk" data-type="BOMB" data-cost="50" data-mul="10"><div>x10</div><div>$500</div></div>
+        <button id="hud-toggle">Toggle HUD</button>
+        <div id="collapsible-hud">
+            <div id="shop-ui">
+                <div id="shop-toggle">SHOP ▲</div>
+                <div id="shop-list">
+                    <div class="shop-row">
+                        <div class="shop-label" style="color:#ffaaaa">Normal</div>
+                        <div class="shop-btn" data-type="NORMAL" data-cost="5" data-mul="1"><div>x1</div><div>$5</div></div>
+                        <div class="shop-btn bulk" data-type="NORMAL" data-cost="5" data-mul="10"><div>x10</div><div>$50</div></div>
+                    </div>
+                    <div class="shop-row">
+                        <div class="shop-label" style="color:#aaffff">Frost</div>
+                        <div class="shop-btn" data-type="FROST" data-cost="20" data-mul="1"><div>x1</div><div>$20</div></div>
+                        <div class="shop-btn bulk" data-type="FROST" data-cost="20" data-mul="10"><div>x10</div><div>$200</div></div>
+                    </div>
+                    <div class="shop-row">
+                        <div class="shop-label" style="color:#aaffaa">Glue</div>
+                        <div class="shop-btn" data-type="GLUE" data-cost="30" data-mul="1"><div>x1</div><div>$30</div></div>
+                        <div class="shop-btn bulk" data-type="GLUE" data-cost="30" data-mul="10"><div>x10</div><div>$300</div></div>
+                    </div>
+                    <div class="shop-row">
+                        <div class="shop-label" style="color:#aaaaaa">Bomb</div>
+                        <div class="shop-btn" data-type="BOMB" data-cost="50" data-mul="1"><div>x1</div><div>$50</div></div>
+                        <div class="shop-btn bulk" data-type="BOMB" data-cost="50" data-mul="10"><div>x10</div><div>$500</div></div>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <div id="weapon-selector">
-            <div class="arrow-btn" id="ws-prev">◀</div>
-            <div id="ws-icon"></div>
-            <div id="ws-name">NORMAL</div>
-            <div id="ws-count">10</div>
-            <div class="arrow-btn" id="ws-next">▶</div>
-        </div>
+            <div id="weapon-selector">
+                <div class="arrow-btn" id="ws-prev">◀</div>
+                <div id="ws-icon"></div>
+                <div id="ws-name">NORMAL</div>
+                <div id="ws-count">10</div>
+                <div class="arrow-btn" id="ws-next">▶</div>
+            </div>
 
-        <!-- HPバー -->
-        <div id="hp-text">HP: 100</div>
-        <div id="hp-container">
-            <div id="hp-bar"></div>
+            <!-- HPバー -->
+            <div id="hp-text">HP: 100</div>
+            <div id="hp-container">
+                <div id="hp-bar"></div>
+            </div>
+
+            <div id="joystick-zone" class="control-ui"><div id="joystick-knob"></div></div>
+            <div id="touch-look-zone" class="control-ui"></div>
+            <div id="btn-throw" class="control-ui">FIRE</div>
+            <div id="btn-call" class="control-ui">COME</div>
+
+            <div id="chat-ui">
+                <div id="chat-messages"></div>
+                <input type="text" id="chat-input" placeholder="Type a message...">
+            </div>
         </div>
 
         <div id="reload-msg">RECALLING!</div>
         <div id="crosshair"></div>
-        <div id="joystick-zone" class="control-ui"><div id="joystick-knob"></div></div>
-        <div id="touch-look-zone" class="control-ui"></div>
-        <div id="btn-throw" class="control-ui">FIRE</div>
-        <div id="btn-call" class="control-ui">COME</div>
-
-        <div id="chat-ui">
-            <div id="chat-messages"></div>
-            <input type="text" id="chat-input" placeholder="Type a message...">
-        </div>
     </div>
 
     <div id="start-screen">
