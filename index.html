@@ -102,9 +102,16 @@
             color: yellow; font-weight: bold; font-size: 18px; display: none; text-shadow: 1px 1px 2px black;
         }
         #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
-            border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 50%; transform: translate(-50%, -50%);
-            background: rgba(255,255,255,0.2);
+            position: absolute; top: 50%; left: 50%; width: 2px; height: 20px;
+            background: rgba(255, 255, 255, 0.8); transform: translate(-50%, -50%);
+        }
+        #crosshair::before {
+            content: ''; position: absolute; top: 50%; left: 50%; width: 20px; height: 2px;
+            background: rgba(255, 255, 255, 0.8); transform: translate(-50%, -50%);
+        }
+        #coordinates {
+            position: absolute; top: 10px; left: 10px; color: white;
+            font-family: monospace; font-size: 14px; text-shadow: 1px 1px 1px black;
         }
         .control-ui { pointer-events: auto; }
         #joystick-zone {
@@ -251,6 +258,7 @@
     <div id="damage-overlay"></div>
 
     <div id="ui-layer">
+        <div id="coordinates">X: 0.00 Y: 0.00 Z: 0.00</div>
         <div id="leaderboard">
             <h2>Leaderboard</h2>
             <ol id="leaderboard-list"></ol>
