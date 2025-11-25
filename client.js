@@ -2,6 +2,8 @@ import * as THREE from 'https://unpkg.com/three@0.150.0/build/three.module.js';
 
 let camera, scene, renderer;
 let prevTime = performance.now();
+let frames = 0;
+let lastFPSTime = prevTime;
 
 let score = 0;
 let currentWeaponIndex = 0;
@@ -328,7 +330,6 @@ function takePlayerDamage(dmg) {
 function gameOver() {
     isGameOver = true;
     if (playerAvatar) playerAvatar.visible = false;
-    socket.emit('playerDied');
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over-screen').style.display = 'flex';
 }
@@ -542,6 +543,13 @@ function animate() {
     const time = performance.now();
     const dt = Math.min((time - prevTime) / 1000, 0.1);
     prevTime = time;
+
+    frames++;
+    if (time >= lastFPSTime + 1000) {
+        document.getElementById('fps-counter').innerText = `FPS: ${frames}`;
+        frames = 0;
+        lastFPSTime = time;
+    }
 
     if (!isGameOver && playerAvatar) {
         if (input.moveX !== 0 || input.moveY !== 0) {

@@ -157,6 +157,43 @@ setInterval(() => {
                     }
                 }
             }
+
+            // PvP Collision
+            for (const playerId in players) {
+                const player = players[playerId];
+                if (playerId !== minion.ownerId && !player.isDead) {
+                    const dx = minion.position.x - player.position.x;
+                    const dy = minion.position.y - (player.position.y); // Avatar center is at y
+                    const dz = minion.position.z - player.position.z;
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+                    if (dist < 2.0) { // Player hitbox
+                        player.hp -= TYPES[minion.type].dmg;
+
+                        if (players[minion.ownerId]) {
+                            players[minion.ownerId].score += 10;
+                            io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
+                        }
+
+                        if (player.hp <= 0) {
+                            player.hp = 0;
+                            player.isDead = true;
+                            io.emit('playerDied', { id: playerId });
+
+                            if (players[minion.ownerId]) {
+                                players[minion.ownerId].score += 50; // Bonus for a kill
+                                io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
+                            }
+                        }
+
+                        io.to(playerId).emit('playerDamaged', { damage: TYPES[minion.type].dmg, hp: player.hp });
+                        updateLeaderboard();
+
+                        hit = true;
+                        break;
+                    }
+                }
+            }
         }
 
             if (hit) {
@@ -188,6 +225,8 @@ io.on('connection', (socket) => {
             position: { x: 0, y: 3.0, z: 10 },
             rotation: { x: 0, y: 0, z: 0 },
             score: 0,
+            hp: 100,
+            maxHp: 100,
             inventory: { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 },
             isDead: false,
         };
@@ -277,6 +316,7 @@ io.on('connection', (socket) => {
         const player = players[socket.id];
         if (player && player.isDead) {
             player.isDead = false;
+            player.hp = player.maxHp;
             player.position = { x: 0, y: 3.0, z: 10 };
             // Reset score and inventory on respawn
             player.score = 0;

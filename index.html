@@ -110,6 +110,10 @@
             background: rgba(255, 255, 255, 0.8); transform: translate(-50%, -50%);
         }
         #coordinates {
+            position: absolute; top: 30px; left: 10px; color: white;
+            font-family: monospace; font-size: 14px; text-shadow: 1px 1px 1px black;
+        }
+        #fps-counter {
             position: absolute; top: 10px; left: 10px; color: white;
             font-family: monospace; font-size: 14px; text-shadow: 1px 1px 1px black;
         }
@@ -266,6 +270,7 @@
     <div id="damage-overlay"></div>
 
     <div id="ui-layer">
+        <div id="fps-counter">FPS: 0</div>
         <div id="coordinates">X: 0.00 Y: 0.00 Z: 0.00</div>
         <div id="leaderboard">
             <h2>Leaderboard</h2>
