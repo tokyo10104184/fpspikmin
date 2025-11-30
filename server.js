@@ -18,17 +18,8 @@ const minions = {};
 
 // Game constants
 const NUM_TARGETS = 3;
-const ITEM_COSTS = {
-    NORMAL: 5,
-    FROST: 20,
-    GLUE: 30,
-    BOMB: 50
-};
 const TYPES = {
-    NORMAL: { dmg: 2 },
-    FROST:  { dmg: 1 },
-    GLUE:   { dmg: 0 },
-    BOMB:   { dmg: 10, radius: 8.0 }
+    NORMAL: { dmg: 5 }, // Pistol damage
 };
 
 class ServerTarget {
@@ -141,17 +132,7 @@ setInterval(() => {
                     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
                     if (dist < 2.0) {
-                        if (minion.type === 'BOMB') {
-                            // Area of effect damage
-                            Object.values(targets).forEach(t => {
-                                const d = Math.sqrt(Math.pow(minion.position.x - t.position.x, 2) + Math.pow(minion.position.z - t.position.z, 2));
-                                if (d < TYPES.BOMB.radius) {
-                                    t.hit(TYPES.BOMB.dmg, minion.ownerId);
-                                }
-                            });
-                        } else {
-                            target.hit(TYPES[minion.type].dmg, minion.ownerId);
-                        }
+                        target.hit(TYPES.NORMAL.dmg, minion.ownerId);
                         hit = true;
                         break;
                     }
@@ -168,11 +149,12 @@ setInterval(() => {
                     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
                     if (dist < 2.0) { // Player hitbox
-                        player.hp -= TYPES[minion.type].dmg;
+                        player.hp -= TYPES.NORMAL.dmg;
 
                         if (players[minion.ownerId]) {
                             players[minion.ownerId].score += 10;
                             io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
+                            updateLeaderboard();
                         }
 
                         if (player.hp <= 0) {
@@ -183,11 +165,11 @@ setInterval(() => {
                             if (players[minion.ownerId]) {
                                 players[minion.ownerId].score += 50; // Bonus for a kill
                                 io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
+                                updateLeaderboard();
                             }
                         }
 
-                        io.to(playerId).emit('playerDamaged', { damage: TYPES[minion.type].dmg, hp: player.hp });
-                        updateLeaderboard();
+                        io.emit('playerDamaged', { id: playerId, damage: TYPES.NORMAL.dmg, hp: player.hp });
 
                         hit = true;
                         break;
@@ -227,11 +209,9 @@ io.on('connection', (socket) => {
             score: 0,
             hp: 100,
             maxHp: 100,
-            inventory: { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 },
             isDead: false,
         };
         socket.emit('updateScore', { score: players[socket.id].score });
-        socket.emit('updateInventory', { inventory: players[socket.id].inventory });
 
         socket.emit('currentPlayers', players);
         socket.broadcast.emit('newPlayer', players[socket.id]);
@@ -250,32 +230,24 @@ io.on('connection', (socket) => {
         if (player && !player.isDead) {
             player.position = movementData.position;
             player.rotation = movementData.rotation;
-            socket.broadcast.emit('playerMoved', player);
+
+            const playerData = {
+                id: player.id,
+                position: player.position,
+                rotation: player.rotation,
+                hp: player.hp,
+                isDead: player.isDead,
+                username: player.username,
+                color: player.color
+            };
+
+            socket.broadcast.emit('playerMoved', playerData);
         }
-    });
-
-    socket.on('recallMinions', () => {
-        const player = players[socket.id];
-        if (!player) return;
-
-        for (const minionId in minions) {
-            if (minions[minionId].ownerId === socket.id) {
-                const minionType = minions[minionId].type;
-                if (player.inventory[minionType] !== undefined) {
-                    player.inventory[minionType]++;
-                }
-                delete minions[minionId];
-            }
-        }
-
-        socket.emit('updateInventory', { inventory: player.inventory });
     });
 
     socket.on('fire', (data) => {
         const player = players[socket.id];
-        if (player && !player.isDead && player.inventory[data.type] > 0) {
-            player.inventory[data.type]--;
-
+        if (player && !player.isDead) {
             const minionId = `minion_${socket.id}_${Date.now()}`;
             minions[minionId] = {
                 id: minionId,
@@ -284,24 +256,11 @@ io.on('connection', (socket) => {
                 state: 'airborne', // New state property
                 position: { ...data.position },
                 velocity: {
-                    x: data.direction.x * 40,
-                    y: data.direction.y * 40 + 5,
-                    z: data.direction.z * 40,
+                    x: data.direction.x * 80, // Increased velocity
+                    y: data.direction.y * 80, // Flatter trajectory
+                    z: data.direction.z * 80,
                 }
             };
-            socket.emit('updateInventory', { inventory: player.inventory });
-        }
-    });
-
-    socket.on('buyItem', (data) => {
-        const player = players[socket.id];
-        const cost = ITEM_COSTS[data.item] * data.quantity;
-        if (player && player.score >= cost) {
-            player.score -= cost;
-            player.inventory[data.item] += data.quantity;
-            socket.emit('updateScore', { score: player.score });
-            socket.emit('updateInventory', { inventory: player.inventory });
-            updateLeaderboard();
         }
     });
 
@@ -320,9 +279,7 @@ io.on('connection', (socket) => {
             player.position = { x: 0, y: 3.0, z: 10 };
             // Reset score and inventory on respawn
             player.score = 0;
-            player.inventory = { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 };
             socket.emit('updateScore', { score: player.score });
-            socket.emit('updateInventory', { inventory: player.inventory });
 
             io.emit('newPlayer', player);
         }

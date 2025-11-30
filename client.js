@@ -6,20 +6,19 @@ let frames = 0;
 let lastFPSTime = prevTime;
 
 let score = 0;
-let currentWeaponIndex = 0;
 let playerHP = 100;
 const MAX_PLAYER_HP = 100;
 let isGameOver = false;
 let playerAvatar;
 
-const inventory = { NORMAL: 10, FROST: 0, GLUE: 0, BOMB: 0 };
-const TYPES = {
-    NORMAL: { key: 'NORMAL', color: 0xff0000, name: 'NORMAL', dmg: 1, uiColor: 'rgba(255,50,50,0.8)' },
-    FROST:  { key: 'FROST',  color: 0x00ffff, name: 'FROST',  dmg: 0.5, uiColor: 'rgba(0,255,255,0.8)' },
-    GLUE:   { key: 'GLUE',   color: 0x00ff00, name: 'GLUE',   dmg: 0, uiColor: 'rgba(50,200,50,0.8)' },
-    BOMB:   { key: 'BOMB',   color: 0x222222, name: 'BOMB',   dmg: 5, uiColor: 'rgba(50,50,50,0.8)' }
+const WEAPON_CONFIG = {
+    PISTOL: {
+        name: 'Pistol',
+        color: 0xffffff,
+        damage: 5,
+        uiColor: 'rgba(200, 200, 200, 0.6)'
+    }
 };
-const TYPE_KEYS = Object.keys(TYPES);
 
 const enemyProjectiles = []; // 敵の弾
 const targets = [];
@@ -95,8 +94,7 @@ function init() {
 
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
-            updateWeaponUI();
-            updateShopUI();
+            updateHUD();
             updatePlayerHPUI();
             setupControls();
         }
@@ -105,7 +103,15 @@ function init() {
     document.getElementById('retry-btn').addEventListener('click', resetGame);
 
     socket.on('playerDamaged', (data) => {
-        takePlayerDamage(data.damage);
+        if (data.id === socket.id) {
+            takePlayerDamage(data.damage);
+        } else if (otherPlayers[data.id]) {
+            const player = otherPlayers[data.id];
+            const hpRatio = data.hp / MAX_PLAYER_HP;
+            if (player.hpBar) {
+                player.hpBar.scale.x = hpRatio;
+            }
+        }
     });
 
     socket.on('currentPlayers', (players) => {
@@ -144,8 +150,12 @@ function init() {
     socket.on('playerMoved', (playerInfo) => {
         if (otherPlayers[playerInfo.id]) {
             otherPlayers[playerInfo.id].group.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
-            // We now receive camera's y-rotation, which corresponds to the avatar's direction
             otherPlayers[playerInfo.id].group.rotation.y = playerInfo.rotation.y;
+
+            const hpRatio = playerInfo.hp / MAX_PLAYER_HP;
+            if (otherPlayers[playerInfo.id].hpBar) {
+                otherPlayers[playerInfo.id].hpBar.scale.x = hpRatio;
+            }
         }
     });
 
@@ -190,17 +200,45 @@ function init() {
 
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
-        context.font = 'Bold 20px Arial';
+        context.font = 'Bold 40px Arial'; // Increased font size
         context.fillStyle = 'white';
-        context.fillText(playerInfo.username, 0, 20);
+        context.strokeStyle = 'black';
+        context.lineWidth = 2;
+        const textWidth = context.measureText(playerInfo.username).width;
+        canvas.width = textWidth;
+        canvas.height = 40;
+        context.font = 'Bold 40px Arial'; // Reset font after canvas resize
+        context.fillStyle = 'white';
+        context.strokeStyle = 'black';
+        context.lineWidth = 2;
+        context.strokeText(playerInfo.username, 0, 35);
+        context.fillText(playerInfo.username, 0, 35);
+
         const texture = new THREE.CanvasTexture(canvas);
 
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.position.y = 2.5;
+        sprite.position.y = 2.8;
         playerGroup.add(sprite);
 
-        otherPlayers[playerInfo.id] = { group: playerGroup };
+        const hpGroup = new THREE.Group();
+        hpGroup.position.y = 2.4;
+        const bgGeo = new THREE.PlaneGeometry(1.5, 0.2);
+        const bgMat = new THREE.MeshBasicMaterial({ color: 0x330000 });
+        hpGroup.add(new THREE.Mesh(bgGeo, bgMat));
+        const barGeo = new THREE.PlaneGeometry(1.5, 0.2);
+        barGeo.translate(0.75, 0, 0);
+        const barMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const hpBar = new THREE.Mesh(barGeo, barMat);
+        hpBar.position.x = -0.75;
+        hpGroup.add(hpBar);
+        playerGroup.add(hpGroup);
+
+        otherPlayers[playerInfo.id] = {
+            group: playerGroup,
+            hpBar: hpBar,
+            hpGroup: hpGroup
+        };
         scene.add(playerGroup);
     }
 
@@ -239,8 +277,8 @@ function init() {
             receivedMinions.add(id);
             let minion = clientMinions[id];
             if (!minion) {
-                const geo = new THREE.SphereGeometry(0.5, 16, 16);
-                const mat = new THREE.MeshStandardMaterial({ color: TYPES[minionState.type].color });
+                const geo = new THREE.SphereGeometry(0.1, 8, 8); // Smaller sphere for bullets
+                const mat = new THREE.MeshStandardMaterial({ color: WEAPON_CONFIG.PISTOL.color });
                 minion = new THREE.Mesh(geo, mat);
                 clientMinions[id] = minion;
                 scene.add(minion);
@@ -260,12 +298,6 @@ function init() {
     socket.on('updateScore', (data) => {
         score = data.score;
         document.getElementById('score-val').innerText = score;
-        updateShopUI();
-    });
-
-    socket.on('updateInventory', (data) => {
-        Object.assign(inventory, data.inventory);
-        updateWeaponUI();
     });
 
     socket.on('updateLeaderboard', (leaderboard) => {
@@ -346,27 +378,13 @@ function resetGame() {
     }
 }
 
-function updateShopUI() {
-    const btns = document.querySelectorAll('.shop-btn');
-    btns.forEach(btn => {
-        const baseCost = parseInt(btn.dataset.cost);
-        const mul = parseInt(btn.dataset.mul);
-        const totalCost = baseCost * mul;
-        if (score >= totalCost) btn.classList.remove('disabled'); else btn.classList.add('disabled');
-    });
-}
-
-function updateWeaponUI() {
-    const currentKey = TYPE_KEYS[currentWeaponIndex];
-    const typeData = TYPES[currentKey];
-    const count = inventory[currentKey];
-    document.getElementById('ws-name').innerText = typeData.name;
-    document.getElementById('ws-icon').style.background = '#' + typeData.color.toString(16).padStart(6, '0');
-    document.getElementById('ws-count').innerText = count;
+function updateHUD() {
+    const weapon = WEAPON_CONFIG.PISTOL;
+    document.getElementById('weapon-name').innerText = weapon.name;
     const fireBtn = document.getElementById('btn-throw');
-    fireBtn.style.background = typeData.uiColor;
-    if (count <= 0) { fireBtn.classList.add('empty'); fireBtn.innerText = "EMPTY"; }
-    else { fireBtn.classList.remove('empty'); fireBtn.innerText = "FIRE"; }
+    fireBtn.style.background = weapon.uiColor;
+    fireBtn.classList.remove('empty');
+    fireBtn.innerText = "FIRE";
 }
 
 function setupControls() {
@@ -440,73 +458,23 @@ function setupControls() {
     lookZone.addEventListener('touchend', endLook, { passive: false });
     lookZone.addEventListener('touchcancel', endLook, { passive: false });
 
-    document.getElementById('ws-prev').addEventListener('click', () => {
-        currentWeaponIndex = (currentWeaponIndex - 1 + TYPE_KEYS.length) % TYPE_KEYS.length;
-        updateWeaponUI();
-    });
-    document.getElementById('ws-next').addEventListener('click', () => {
-        currentWeaponIndex = (currentWeaponIndex + 1) % TYPE_KEYS.length;
-        updateWeaponUI();
-    });
-    document.getElementById('weapon-selector').addEventListener('click', (e) => {
-        if(e.target.classList.contains('arrow-btn')) return;
-        currentWeaponIndex = (currentWeaponIndex + 1) % TYPE_KEYS.length;
-        updateWeaponUI();
-    });
-
-    const shopToggle = document.getElementById('shop-toggle');
-    const shopList = document.getElementById('shop-list');
-    const toggleShop = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        shopList.classList.toggle('closed');
-        shopToggle.innerText = shopList.classList.contains('closed') ? 'SHOP ▼' : 'SHOP ▲';
-    };
-    shopToggle.addEventListener('touchstart', toggleShop, {passive: false});
-    shopToggle.addEventListener('mousedown', toggleShop);
-
-    const buyAction = (e, btn) => {
-        e.stopPropagation();
-        const type = btn.dataset.type;
-        const mul = parseInt(btn.dataset.mul);
-        socket.emit('buyItem', { item: type, quantity: mul });
-    };
-    document.querySelectorAll('.shop-btn').forEach(btn => {
-        btn.addEventListener('touchstart', (e) => buyAction(e, btn), {passive: false});
-        btn.addEventListener('mousedown', (e) => buyAction(e, btn));
-    });
-
     const throwBtn = document.getElementById('btn-throw');
     const throwAction = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(isGameOver) return;
-        const currentKey = TYPE_KEYS[currentWeaponIndex];
-        if (inventory[currentKey] > 0) {
-            const camDir = new THREE.Vector3();
-            camera.getWorldDirection(camDir);
 
-            const startPos = camera.position.clone();
+        const camDir = new THREE.Vector3();
+        camera.getWorldDirection(camDir);
 
-            socket.emit('fire', {
-                type: currentKey,
-                position: startPos,
-                direction: camDir
-            });
-            inventory[currentKey]--;
-            updateWeaponUI();
-        }
+        const startPos = camera.position.clone();
+
+        socket.emit('fire', {
+            type: 'NORMAL', // Server expects 'NORMAL'
+            position: startPos,
+            direction: camDir
+        });
     };
     throwBtn.addEventListener('touchstart', throwAction); throwBtn.addEventListener('mousedown', throwAction);
-
-    const callBtn = document.getElementById('btn-call');
-    const callAction = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        if(isGameOver) return;
-        socket.emit('recallMinions');
-        const msg = document.getElementById('reload-msg');
-        msg.style.display = 'block';
-        setTimeout(() => { msg.style.display = 'none'; }, 1000);
-    };
-    callBtn.addEventListener('touchstart', callAction); callBtn.addEventListener('mousedown', callAction);
 
     const chatInput = document.getElementById('chat-input');
     chatInput.addEventListener('keydown', (e) => {
@@ -578,6 +546,13 @@ function animate() {
         const coords = playerAvatar.position;
         document.getElementById('coordinates').textContent =
             `X: ${coords.x.toFixed(2)} Y: ${coords.y.toFixed(2)} Z: ${coords.z.toFixed(2)}`;
+    }
+
+    // Update other players' HP bars to face the camera
+    for (const id in otherPlayers) {
+        if (otherPlayers[id].hpGroup) {
+            otherPlayers[id].hpGroup.lookAt(camera.position);
+        }
     }
 
     renderer.render(scene, camera);
