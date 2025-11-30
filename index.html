@@ -61,41 +61,35 @@
             background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
         }
 
-        #shop-ui {
-            position: absolute; top: 10px; right: 10px;
-            display: flex; flex-direction: column; gap: 5px;
-            pointer-events: auto; z-index: 100; 
-            background: rgba(0,0,0,0.3); padding: 5px; border-radius: 8px;
+        #weapon-hud {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 180px;
+            height: 60px;
+            background: rgba(0,0,0,0.6);
+            border-top: 2px solid rgba(255,255,255,0.5);
+            border-left: 2px solid rgba(255,255,255,0.5);
+            border-radius: 10px 0 0 0;
+            padding: 10px;
+            color: white;
+            font-family: sans-serif;
+            pointer-events: auto;
         }
-        .shop-row { display: flex; align-items: center; gap: 5px; }
-        .shop-label { color: white; font-size: 12px; font-weight: bold; width: 50px; text-align: right; text-shadow: 1px 1px 1px black; }
-        .shop-btn {
-            background: rgba(0,0,0,0.6); color: white; border: 1px solid white; border-radius: 5px;
-            padding: 5px; font-size: 11px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            width: 50px; height: 35px; cursor: pointer; transition: 0.2s;
+        #weapon-ammo {
+            font-size: 28px;
+            font-weight: bold;
+            text-align: right;
         }
-        .shop-btn:active { transform: scale(0.95); background: rgba(255,255,255,0.2); }
-        .shop-btn.disabled { opacity: 0.4; pointer-events: none; border-color: #555; background: #222; }
-        .shop-btn.bulk { border-color: #ffd700; color: #ffd700; width: 55px; }
-        #shop-toggle {
-            background: rgba(0,0,0,0.8); color: #ffd700; border: 1px solid #ffd700;
-            border-radius: 5px; padding: 5px 10px; font-size: 12px; font-weight: bold;
-            text-align: center; cursor: pointer; margin-bottom: 5px; align-self: flex-end; width: 100%;
+        #weapon-ammo #ammo-total {
+            font-size: 18px;
+            color: #aaa;
         }
-        #shop-list { display: flex; flex-direction: column; gap: 5px; }
-        #shop-list.closed { display: none; }
-
-        #weapon-selector {
-            position: absolute; bottom: 150px; right: 120px;
-            background: rgba(0,0,0,0.5); padding: 10px;
-            border-radius: 20px; border: 2px solid rgba(255,255,255,0.5);
-            display: flex; align-items: center; gap: 10px;
-            pointer-events: auto; z-index: 100; 
+        #weapon-name {
+            font-size: 16px;
+            text-align: right;
+            color: #ccc;
         }
-        #ws-icon { width: 20px; height: 20px; border-radius: 50%; background: red; box-shadow: 0 0 5px white; }
-        #ws-name { color: white; font-weight: bold; font-size: 14px; width: 60px; text-align: center;}
-        #ws-count { color: #00ff00; font-weight: bold; font-size: 18px; min-width: 30px; text-align: right;}
-        .arrow-btn { color: white; font-size: 18px; padding: 0 10px; cursor: pointer; }
 
         #reload-msg {
             position: absolute; bottom: 250px; left: 50%; transform: translateX(-50%);
@@ -135,20 +129,13 @@
             background: rgba(255, 255, 255, 0.5); border-radius: 50%; transform: translate(-50%, -50%);
         }
         #btn-throw {
-            position: absolute; bottom: 60px; right: 30px; width: 80px; height: 80px;
+            position: absolute; bottom: 120px; right: 30px; width: 80px; height: 80px;
             background: rgba(200, 200, 200, 0.6); border: 4px solid white; border-radius: 50%;
             color: white; font-weight: bold; display: flex; align-items: center; justify-content: center;
             font-size: 16px; box-shadow: 0 0 15px rgba(0,0,0,0.5); text-shadow: 1px 1px 2px black; transition: background 0.2s; z-index: 100;
         }
         #btn-throw:active { transform: scale(0.95); }
         #btn-throw.empty { background: #333 !important; opacity: 0.7; border-color: #555; }
-        #btn-call {
-            position: absolute; bottom: 160px; right: 30px; width: 60px; height: 60px;
-            background: rgba(50, 50, 255, 0.6); border: 2px solid white; border-radius: 50%;
-            color: white; font-weight: bold; display: flex; align-items: center; justify-content: center;
-            font-size: 12px; box-shadow: 0 0 10px rgba(0,0,0,0.5); z-index: 100;
-        }
-        #btn-call:active { background: rgba(50, 50, 255, 0.9); transform: scale(0.95); }
         #touch-look-zone { position: absolute; top: 0; right: 0; width: 60%; height: 100%; z-index: 20;}
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -281,38 +268,9 @@
 
         <button id="hud-toggle">Toggle HUD</button>
         <div id="collapsible-hud">
-            <div id="shop-ui">
-                <div id="shop-toggle">SHOP ▲</div>
-                <div id="shop-list">
-                    <div class="shop-row">
-                        <div class="shop-label" style="color:#ffaaaa">Normal</div>
-                        <div class="shop-btn" data-type="NORMAL" data-cost="5" data-mul="1"><div>x1</div><div>$5</div></div>
-                        <div class="shop-btn bulk" data-type="NORMAL" data-cost="5" data-mul="10"><div>x10</div><div>$50</div></div>
-                    </div>
-                    <div class="shop-row">
-                        <div class="shop-label" style="color:#aaffff">Frost</div>
-                        <div class="shop-btn" data-type="FROST" data-cost="20" data-mul="1"><div>x1</div><div>$20</div></div>
-                        <div class="shop-btn bulk" data-type="FROST" data-cost="20" data-mul="10"><div>x10</div><div>$200</div></div>
-                    </div>
-                    <div class="shop-row">
-                        <div class="shop-label" style="color:#aaffaa">Glue</div>
-                        <div class="shop-btn" data-type="GLUE" data-cost="30" data-mul="1"><div>x1</div><div>$30</div></div>
-                        <div class="shop-btn bulk" data-type="GLUE" data-cost="30" data-mul="10"><div>x10</div><div>$300</div></div>
-                    </div>
-                    <div class="shop-row">
-                        <div class="shop-label" style="color:#aaaaaa">Bomb</div>
-                        <div class="shop-btn" data-type="BOMB" data-cost="50" data-mul="1"><div>x1</div><div>$50</div></div>
-                        <div class="shop-btn bulk" data-type="BOMB" data-cost="50" data-mul="10"><div>x10</div><div>$500</div></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="weapon-selector">
-                <div class="arrow-btn" id="ws-prev">◀</div>
-                <div id="ws-icon"></div>
-                <div id="ws-name">NORMAL</div>
-                <div id="ws-count">10</div>
-                <div class="arrow-btn" id="ws-next">▶</div>
+            <div id="weapon-hud">
+                <div id="weapon-ammo">10 <span id="ammo-total">/ ∞</span></div>
+                <div id="weapon-name">Pistol</div>
             </div>
 
             <!-- HPバー -->
@@ -324,7 +282,6 @@
             <div id="joystick-zone" class="control-ui"><div id="joystick-knob"></div></div>
             <div id="touch-look-zone" class="control-ui"></div>
             <div id="btn-throw" class="control-ui">FIRE</div>
-            <div id="btn-call" class="control-ui">COME</div>
 
             <div id="chat-ui">
                 <div id="chat-messages"></div>
