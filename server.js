@@ -5,7 +5,8 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 const io = new Server(server);
 
-app.use(express.static(__jh_placeholder_0__));
+// ★ここを修正しました (__dirname に変更)
+app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
@@ -113,6 +114,7 @@ setInterval(() => {
 
 }, 1000 / 60); // 60 FPS
 
-server.listen(3000, () => {
-  console.log('listening on *:3000');
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+  console.log(`listening on *:${port}`);
 });
