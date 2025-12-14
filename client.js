@@ -10,6 +10,8 @@ let playerHP = 100;
 const MAX_PLAYER_HP = 100;
 let isGameOver = false;
 let playerAvatar;
+let ammoInMagazine = 10;
+let pistol;
 
 const WEAPON_CONFIG = {
     PISTOL: {
@@ -66,6 +68,11 @@ function init() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 5, 18); // Set a stable initial camera position
     camera.rotation.order = "YXZ";
+
+    pistol = createPistol();
+    camera.add(pistol);
+    scene.add(camera); // Add camera to scene so pistol is visible
+
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -300,6 +307,11 @@ function init() {
         document.getElementById('score-val').innerText = score;
     });
 
+    socket.on('weaponReloaded', (data) => {
+        ammoInMagazine = data.ammoInMagazine;
+        updateHUD();
+    });
+
     socket.on('updateLeaderboard', (leaderboard) => {
         const list = document.getElementById('leaderboard-list');
         list.innerHTML = '';
@@ -381,10 +393,16 @@ function resetGame() {
 function updateHUD() {
     const weapon = WEAPON_CONFIG.PISTOL;
     document.getElementById('weapon-name').innerText = weapon.name;
+    document.getElementById('weapon-ammo').innerHTML = `${ammoInMagazine} <span id="ammo-total">/ ∞</span>`;
     const fireBtn = document.getElementById('btn-throw');
     fireBtn.style.background = weapon.uiColor;
-    fireBtn.classList.remove('empty');
-    fireBtn.innerText = "FIRE";
+    if (ammoInMagazine > 0) {
+        fireBtn.classList.remove('empty');
+        fireBtn.innerText = "FIRE";
+    } else {
+        fireBtn.classList.add('empty');
+        fireBtn.innerText = "EMPTY";
+    }
 }
 
 function setupControls() {
@@ -461,12 +479,23 @@ function setupControls() {
     const throwBtn = document.getElementById('btn-throw');
     const throwAction = (e) => {
         e.preventDefault(); e.stopPropagation();
-        if(isGameOver) return;
+        if(isGameOver || ammoInMagazine <= 0) return;
+
+        ammoInMagazine--;
+        updateHUD();
+
+        // Muzzle flash
+        const muzzleFlash = new THREE.PointLight(0xffcc00, 10, 5);
+        muzzleFlash.position.set(0.5, -0.4, -2);
+        camera.add(muzzleFlash);
+        setTimeout(() => camera.remove(muzzleFlash), 50);
 
         const camDir = new THREE.Vector3();
         camera.getWorldDirection(camDir);
 
-        const startPos = camera.position.clone();
+        const startPos = new THREE.Vector3();
+        pistol.getWorldPosition(startPos);
+        startPos.addScaledVector(camDir, 0.5); // Start the bullet slightly in front of the gun
 
         socket.emit('fire', {
             type: 'NORMAL', // Server expects 'NORMAL'
@@ -475,6 +504,16 @@ function setupControls() {
         });
     };
     throwBtn.addEventListener('touchstart', throwAction); throwBtn.addEventListener('mousedown', throwAction);
+
+    const reloadBtn = document.getElementById('btn-reload');
+    const reloadAction = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if(isGameOver) return;
+        socket.emit('reloadWeapon');
+    };
+    reloadBtn.addEventListener('touchstart', reloadAction);
+    reloadBtn.addEventListener('mousedown', reloadAction);
+
 
     const chatInput = document.getElementById('chat-input');
     chatInput.addEventListener('keydown', (e) => {
@@ -556,4 +595,24 @@ function animate() {
     }
 
     renderer.render(scene, camera);
+}
+
+function createPistol() {
+    const pistolGroup = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+
+    // Main body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.3, 0.8), bodyMat);
+    pistolGroup.add(body);
+
+    // Handle
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.2), bodyMat);
+    handle.position.set(0, -0.25, 0.1);
+    handle.rotation.x = 0.2;
+    pistolGroup.add(handle);
+
+    pistolGroup.position.set(0.5, -0.4, -1);
+    pistolGroup.rotation.y = -0.2;
+
+    return pistolGroup;
 }
