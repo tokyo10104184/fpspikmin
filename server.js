@@ -136,59 +136,150 @@ setInterval(() => {
       b.vz *= 0.9;
     }
 
-    // 速度計算
-    const speed = Math.sqrt(b.vx*b.vx + b.vy*b.vy + b.vz*b.vz);
+                            if (players[minion.ownerId]) {
+                                players[minion.ownerId].score += 50; // Bonus for a kill
+                                io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
+                                updateLeaderboard();
+                            }
+                        }
 
-    // ★ 弾と敵の当たり判定
-    let hit = false;
-    for (let j = minions.length - 1; j >= 0; j--) {
-      const m = minions[j];
-      const dx = b.x - m.x;
-      const dy = b.y - m.y;
-      const dz = b.z - m.z;
-      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                        io.emit('playerDamaged', { id: playerId, damage: TYPES.NORMAL.dmg, hp: player.hp });
 
-      if (dist < 1.0) { // 当たり判定半径
-        m.hp--;
-        hit = true;
-        // 敵死亡判定
-        if (m.hp <= 0) {
-          minions.splice(j, 1);
-          // スコア加算
-          if (players[b.ownerId]) {
-            players[b.ownerId].score += 100;
-            io.to(b.ownerId).emit('updateScore', players[b.ownerId].score);
-          }
+                        hit = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+            if (hit) {
+                delete minions[minionId];
+            }
         }
         break; // 1発で1体のみヒット
       }
     }
 
-    // 弾が敵に当たったら即削除
-    if (hit) {
-      io.emit('removeBullet', b.id);
-      bullets.splice(i, 1);
-      continue;
-    }
+    // Broadcast game state to all clients
+    const targetsState = {};
+    for (const id in targets) targetsState[id] = targets[id].getState();
 
-    // ★ 止まった弾の削除処理 (前回実装分)
-    if (speed < 0.05) {
-      if (!b.stopTime) b.stopTime = Date.now();
-      else if (Date.now() - b.stopTime > 2000) {
-        io.emit('removeBullet', b.id);
-        bullets.splice(i, 1);
-      }
-    } else {
-      b.stopTime = null;
-    }
-  }
+    const minionsState = {};
+    for (const id in minions) minionsState[id] = { id: id, position: minions[id].position, type: minions[id].type };
+
+    io.emit('gameStateUpdate', { targets: targetsState, minions: minionsState });
+
+}, 1000 / 30);
+
+io.on('connection', (socket) => {
+    console.log('a user connected:', socket.id);
+
+    socket.on('initPlayer', (data) => {
+        players[socket.id] = {
+            id: socket.id,
+            username: data.username,
+            color: data.color,
+            position: { x: 0, y: 3.0, z: 10 },
+            rotation: { x: 0, y: 0, z: 0 },
+            score: 0,
+            hp: 100,
+            maxHp: 100,
+            ammoInMagazine: 10,
+            magazineSize: 10,
+            isDead: false,
+        };
+        socket.emit('updateScore', { score: players[socket.id].score });
+
+        socket.emit('currentPlayers', players);
+        socket.broadcast.emit('newPlayer', players[socket.id]);
+        updateLeaderboard();
+    });
+
+    socket.on('disconnect', () => {
+        console.log('user disconnected:', socket.id);
+        delete players[socket.id];
+        io.emit('playerDisconnected', socket.id);
+        updateLeaderboard();
+    });
+
+    socket.on('playerMovement', (movementData) => {
+        const player = players[socket.id];
+        if (player && !player.isDead) {
+            player.position = movementData.position;
+            player.rotation = movementData.rotation;
+
+            const playerData = {
+                id: player.id,
+                position: player.position,
+                rotation: player.rotation,
+                hp: player.hp,
+                isDead: player.isDead,
+                username: player.username,
+                color: player.color
+            };
+
+            socket.broadcast.emit('playerMoved', playerData);
+        }
+    });
+
+    socket.on('fire', (data) => {
+        const player = players[socket.id];
+        if (player && !player.isDead && player.ammoInMagazine > 0) {
+            player.ammoInMagazine--;
+            const minionId = `minion_${socket.id}_${Date.now()}`;
+            minions[minionId] = {
+                id: minionId,
+                ownerId: socket.id,
+                type: data.type,
+                state: 'airborne', // New state property
+                position: { ...data.position },
+                velocity: {
+                    x: data.direction.x * 80, // Increased velocity
+                    y: data.direction.y * 80, // Flatter trajectory
+                    z: data.direction.z * 80,
+                }
+            };
+        }
+    });
+
+    socket.on('playerDied', () => {
+        if (players[socket.id]) {
+            players[socket.id].isDead = true;
+            io.emit('playerDied', { id: socket.id });
+        }
+    });
+
+    socket.on('requestRespawn', () => {
+        const player = players[socket.id];
+        if (player && player.isDead) {
+            player.isDead = false;
+            player.hp = player.maxHp;
+            player.position = { x: 0, y: 3.0, z: 10 };
+            player.ammoInMagazine = player.magazineSize;
+            // Reset score and inventory on respawn
+            player.score = 0;
+            socket.emit('updateScore', { score: player.score });
 
   // 状態の一括送信
   io.emit('statePlayers', players);
   io.emit('stateBullets', bullets);
   io.emit('stateMinions', minions); // 敵の位置も送信
 
-}, 1000 / 60);
+    socket.on('reloadWeapon', () => {
+        const player = players[socket.id];
+        if (player && !player.isDead) {
+            player.ammoInMagazine = player.magazineSize;
+            socket.emit('weaponReloaded', { ammoInMagazine: player.ammoInMagazine });
+        }
+    });
+
+    socket.on('chatMessage', (msg) => {
+        const player = players[socket.id];
+        if (player) {
+            io.emit('chatMessage', { username: player.username, message: msg });
+        }
+    });
+});
 
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
