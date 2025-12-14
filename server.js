@@ -5,162 +5,136 @@ const server = http.createServer(app);
 const { Server } = require("socket.io");
 const io = new Server(server);
 
+// ディレクトリ設定
 app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
 
-// Game state
+// --- ゲーム状態 ---
 const players = {};
-const targets = {};
-const minions = {};
+const bullets = [];
+const minions = []; // 敵キャラクター
+let bulletIdCounter = 0;
+let minionIdCounter = 0;
 
-// Game constants
-const NUM_TARGETS = 3;
-const TYPES = {
-    NORMAL: { dmg: 5 }, // Pistol damage
-};
+// 定数
+const MAP_SIZE = 50;
 
-class ServerTarget {
-    constructor() {
-        this.id = `enemy_${Math.random().toString(36).substr(2, 9)}`;
-        this.maxHp = 20;
-        this.hp = this.maxHp;
-        this.active = true;
-        this.baseSpeed = 4.0;
-        this.attackTimer = Math.random() * 3;
+io.on('connection', (socket) => {
+  console.log('Player connected: ' + socket.id);
 
-        this.position = {
-            x: Math.random() * 20 - 10,
-            y: 0,
-            z: Math.random() * 20 - 10
-        };
-        this.rotationY = 0;
+  // プレイヤー参加
+  socket.on('join', (data) => {
+    players[socket.id] = {
+      id: socket.id,
+      username: data.username || "Player",
+      x: 0, y: 1, z: 0,
+      color: data.color || '#ff0000',
+      rotation: 0,
+      hp: 100,
+      score: 0
+    };
+    io.emit('updatePlayerList', players);
+  });
+
+  // プレイヤーの操作受信
+  socket.on('playerInput', (data) => {
+    if (players[socket.id]) {
+      players[socket.id].x = data.x;
+      players[socket.id].y = data.y;
+      players[socket.id].z = data.z;
+      players[socket.id].rotation = data.rotation;
     }
+  });
 
-    update(dt, players) {
-        // AI logic disabled
-    }
+  // 発射
+  socket.on('shoot', (data) => {
+    const bullet = {
+      id: `bullet_${bulletIdCounter++}`,
+      ownerId: socket.id,
+      x: data.x,
+      y: data.y,
+      z: data.z,
+      vx: data.vx,
+      vy: data.vy,
+      vz: data.vz,
+      stopTime: null
+    };
+    bullets.push(bullet);
+    io.emit('spawnBullet', bullet);
+  });
 
-    hit(damage, ownerId) {
-        if (!this.active) return;
-        this.hp -= damage;
-        if (this.hp <= 0) {
-            this.hp = 0;
-            this.active = false;
+  // 切断
+  socket.on('disconnect', () => {
+    console.log('Player disconnected');
+    delete players[socket.id];
+    io.emit('removePlayer', socket.id);
+  });
+});
 
-            // Respawn after 5 seconds
-            setTimeout(() => this.respawn(), 5000);
-
-            if (players[ownerId]) {
-                players[ownerId].score += 100;
-                io.to(ownerId).emit('updateScore', { score: players[ownerId].score });
-                updateLeaderboard();
-            }
-        }
-    }
-
-    respawn() {
-        this.hp = this.maxHp;
-        this.active = true;
-        this.position = {
-            x: Math.random() * 20 - 10,
-            y: 0,
-            z: Math.random() * 20 - 10
-        };
-    }
-
-    getState() {
-        return {
-            id: this.id,
-            position: this.position,
-            rotationY: this.rotationY,
-            hp: this.hp,
-            maxHp: this.maxHp,
-            active: this.active
-        };
-    }
-}
-
-// Initialize targets
-for (let i = 0; i < NUM_TARGETS; i++) {
-    const target = new ServerTarget();
-    targets[target.id] = target;
-}
-
-// Main Game Loop
-let lastUpdateTime = Date.now();
-
-function updateLeaderboard() {
-    const leaderboard = Object.values(players)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 10)
-        .map(p => ({ username: p.username, score: p.score }));
-    io.emit('updateLeaderboard', leaderboard);
-}
-
+// --- 敵のスポーン (3秒ごとに生成) ---
 setInterval(() => {
-    const now = Date.now();
-    const dt = (now - lastUpdateTime) / 1000;
-    lastUpdateTime = now;
+  if (minions.length < 20) { // 最大20体まで
+    // ランダムな位置に出現
+    const x = (Math.random() - 0.5) * MAP_SIZE;
+    const z = (Math.random() - 0.5) * MAP_SIZE;
+    const minion = {
+      id: `minion_${minionIdCounter++}`,
+      x: x,
+      y: 1,
+      z: z,
+      hp: 3, // HP
+      speed: 0.05 + Math.random() * 0.03 // ランダムな速度
+    };
+    minions.push(minion);
+    // 新規生成は stateMinions で一括同期されるので個別のemitは省略可だが、エフェクト用に分けても良い
+  }
+}, 3000);
 
-    // Update all targets
-    Object.values(targets).forEach(target => target.update(dt, players));
+// --- ゲームループ (60FPS) ---
+setInterval(() => {
+  
+  // 1. 敵のAI（一番近いプレイヤーを追いかける）
+  minions.forEach(minion => {
+    let target = null;
+    let minDist = 9999;
 
-    // Update all minions and check for collisions
-    for (const minionId in minions) {
-        const minion = minions[minionId];
+    for (const pid in players) {
+      const p = players[pid];
+      const dx = p.x - minion.x;
+      const dz = p.z - minion.z;
+      const dist = Math.sqrt(dx*dx + dz*dz);
+      if (dist < minDist) {
+        minDist = dist;
+        target = p;
+      }
+    }
 
-        if (minion.state === 'airborne') {
-            minion.velocity.y -= 30 * dt;
-            minion.position.x += minion.velocity.x * dt;
-            minion.position.y += minion.velocity.y * dt;
-            minion.position.z += minion.velocity.z * dt;
+    if (target && minDist > 1) { // プレイヤーに重ならない程度まで近づく
+      const angle = Math.atan2(target.z - minion.z, target.x - minion.x);
+      minion.x += Math.cos(angle) * minion.speed;
+      minion.z += Math.sin(angle) * minion.speed;
+    }
+  });
 
-            let hit = false;
+  // 2. 弾の移動と物理
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    const b = bullets[i];
+    b.x += b.vx;
+    b.y += b.vy;
+    b.z += b.vz;
 
-            if (minion.position.y < 0.5) {
-                hit = true; // Hit the ground
-            } else {
-                for (const targetId in targets) {
-                const target = targets[targetId];
-                if (target.active) {
-                    const dx = minion.position.x - target.position.x;
-                    const dy = minion.position.y - (target.position.y + 1.5);
-                    const dz = minion.position.z - target.position.z;
-                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-                    if (dist < 2.0) {
-                        target.hit(TYPES.NORMAL.dmg, minion.ownerId);
-                        hit = true;
-                        break;
-                    }
-                }
-            }
-
-            // PvP Collision
-            for (const playerId in players) {
-                const player = players[playerId];
-                if (playerId !== minion.ownerId && !player.isDead) {
-                    const dx = minion.position.x - player.position.x;
-                    const dy = minion.position.y - (player.position.y); // Avatar center is at y
-                    const dz = minion.position.z - player.position.z;
-                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-
-                    if (dist < 2.0) { // Player hitbox
-                        player.hp -= TYPES.NORMAL.dmg;
-
-                        if (players[minion.ownerId]) {
-                            players[minion.ownerId].score += 10;
-                            io.to(minion.ownerId).emit('updateScore', { score: players[minion.ownerId].score });
-                            updateLeaderboard();
-                        }
-
-                        if (player.hp <= 0) {
-                            player.hp = 0;
-                            player.isDead = true;
-                            io.emit('playerDied', { id: playerId });
+    // 重力
+    b.vy -= 0.02;
+    // 地面判定
+    if (b.y <= 0.2) {
+      b.y = 0.2;
+      b.vy *= -0.5;
+      b.vx *= 0.9;
+      b.vz *= 0.9;
+    }
 
                             if (players[minion.ownerId]) {
                                 players[minion.ownerId].score += 50; // Bonus for a kill
@@ -182,6 +156,8 @@ setInterval(() => {
                 delete minions[minionId];
             }
         }
+        break; // 1発で1体のみヒット
+      }
     }
 
     // Broadcast game state to all clients
@@ -284,9 +260,10 @@ io.on('connection', (socket) => {
             player.score = 0;
             socket.emit('updateScore', { score: player.score });
 
-            io.emit('newPlayer', player);
-        }
-    });
+  // 状態の一括送信
+  io.emit('statePlayers', players);
+  io.emit('stateBullets', bullets);
+  io.emit('stateMinions', minions); // 敵の位置も送信
 
     socket.on('reloadWeapon', () => {
         const player = players[socket.id];
@@ -304,6 +281,7 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(3000, () => {
-    console.log('listening on *:3000');
+const port = process.env.PORT || 3000;
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
