@@ -61,10 +61,16 @@
             background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
         }
 
-        #weapon-hud {
+        #weapon-hud-container {
             position: absolute;
             bottom: 20px;
             right: 20px;
+            width: 220px;
+            height: 100px;
+            pointer-events: none;
+        }
+        .weapon-hud {
+            position: absolute;
             width: 180px;
             height: 60px;
             background: rgba(0,0,0,0.6);
@@ -75,17 +81,36 @@
             color: white;
             font-family: sans-serif;
             pointer-events: auto;
+            transition: all 0.3s ease;
         }
-        #weapon-ammo {
+        #weapon-hud-primary {
+            bottom: 0;
+            right: 0;
+            z-index: 2;
+        }
+        #weapon-hud-secondary {
+            bottom: 0;
+            right: 0;
+            transform: translate(30px, -20px) scale(0.9);
+            background: rgba(0,0,0,0.4);
+            z-index: 1;
+            opacity: 0.7;
+            cursor: pointer;
+        }
+        #weapon-hud-secondary:hover {
+            opacity: 1;
+            transform: translate(25px, -22px) scale(0.92);
+        }
+        .weapon-ammo {
             font-size: 28px;
             font-weight: bold;
             text-align: right;
         }
-        #weapon-ammo #ammo-total {
+        .weapon-ammo .ammo-total {
             font-size: 18px;
             color: #aaa;
         }
-        #weapon-name {
+        .weapon-name {
             font-size: 16px;
             text-align: right;
             color: #ccc;
@@ -274,9 +299,15 @@
 
         <button id="hud-toggle">Toggle HUD</button>
         <div id="collapsible-hud">
-            <div id="weapon-hud">
-                <div id="weapon-ammo">10 <span id="ammo-total">/ ∞</span></div>
-                <div id="weapon-name">Pistol</div>
+            <div id="weapon-hud-container">
+                <div id="weapon-hud-secondary" class="weapon-hud">
+                    <div id="weapon-ammo-secondary" class="weapon-ammo">30 <span class="ammo-total">/ ∞</span></div>
+                    <div id="weapon-name-secondary" class="weapon-name">Rifle</div>
+                </div>
+                <div id="weapon-hud-primary" class="weapon-hud">
+                    <div id="weapon-ammo-primary" class="weapon-ammo">10 <span class="ammo-total">/ ∞</span></div>
+                    <div id="weapon-name-primary" class="weapon-name">Pistol</div>
+                </div>
             </div>
 
             <!-- HPバー -->
