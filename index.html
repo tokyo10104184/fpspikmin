@@ -128,7 +128,6 @@
             position: absolute; top: 50%; left: 50%; width: 50px; height: 50px;
             background: rgba(255, 255, 255, 0.5); border-radius: 50%; transform: translate(-50%, -50%);
         }
-        
         #btn-throw {
             position: absolute; bottom: 120px; right: 30px; width: 80px; height: 80px;
             background: rgba(200, 200, 200, 0.6); border: 4px solid white; border-radius: 50%;
@@ -258,44 +257,6 @@
             color: white;
             padding: 5px;
         }
-
-        /* --- モバイル・スマホ最適化 --- */
-        @media (max-width: 900px) {
-            /* 発射ボタンを大きく */
-            #btn-throw {
-                width: 90px; height: 90px;
-                bottom: 80px; right: 20px;
-            }
-            /* ジョイスティックを大きく */
-            #joystick-zone {
-                width: 140px; height: 140px;
-                bottom: 40px; left: 20px;
-            }
-            #joystick-knob {
-                width: 70px; height: 70px;
-            }
-            /* リロードボタン配置調整 */
-            #btn-reload {
-                width: 70px; height: 70px;
-                bottom: 30px; right: 130px;
-            }
-            /* 武器HUDを少し小さくして邪魔にならないように */
-            #weapon-hud {
-                transform: scale(0.8);
-                transform-origin: bottom right;
-                right: 10px; bottom: 10px;
-            }
-            /* HPバーとチャットの位置調整 */
-            #hp-container, #hp-text, #chat-ui {
-                left: 180px; /* 必要なら調整 */
-            }
-            /* チャットUIをモバイルでは少し小さくするか、閉じるボタン等が欲しいが、とりあえずサイズ調整 */
-            #chat-ui {
-                width: 200px;
-                bottom: 180px;
-                left: 20px;
-            }
-        }
     </style>
 </head>
 <body>
@@ -314,8 +275,7 @@
         <button id="hud-toggle">Toggle HUD</button>
         <div id="collapsible-hud">
             <div id="weapon-hud">
-                <!-- 弾数表示をID付きに変更 -->
-                <div id="weapon-ammo"><span id="current-ammo">10</span> <span id="ammo-total">/ 10</span></div>
+                <div id="weapon-ammo">10 <span id="ammo-total">/ ∞</span></div>
                 <div id="weapon-name">Pistol</div>
             </div>
 
@@ -327,7 +287,6 @@
 
             <div id="joystick-zone" class="control-ui"><div id="joystick-knob"></div></div>
             <div id="touch-look-zone" class="control-ui"></div>
-            
             <div id="btn-throw" class="control-ui">FIRE</div>
             <div id="btn-reload" class="control-ui">RELOAD</div>
 
@@ -337,7 +296,7 @@
             </div>
         </div>
 
-        <div id="reload-msg">RELOADING!</div>
+        <div id="reload-msg">RECALLING!</div>
         <div id="crosshair"></div>
     </div>
 
