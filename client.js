@@ -140,93 +140,157 @@ function init() {
             }
         }
     });
-});
 
-playButton.disabled = false;
-playButton.innerText = "PLAY";
-playButton.addEventListener('click', () => {
-    const username = usernameInput.value || "Guest";
-    startScreen.style.display = 'none';
-    socket.emit('join', { username, color: selectedColor });
-    camera.position.set(0, 1.6, 0); // 初期位置
-});
-
-// --- アクション (発射・リロード) ---
-function reloadWeapon() {
-    if (isReloading || currentAmmo === MAX_AMMO) return;
-    isReloading = true;
-    reloadMsg.style.display = 'block';
-    reloadMsg.innerText = "RELOADING...";
-    btnReload.classList.add('reloading');
-    setTimeout(() => {
-        currentAmmo = MAX_AMMO;
-        isReloading = false;
-        reloadMsg.style.display = 'none';
-        btnReload.classList.remove('reloading');
-        updateAmmoHUD();
-    }, 2000);
-}
-
-function updateAmmoHUD() {
-    ammoDisplay.innerText = currentAmmo;
-    if (currentAmmo <= 0) btnThrow.classList.add('empty');
-    else btnThrow.classList.remove('empty');
-}
-
-function shoot() {
-    if (isReloading || currentAmmo <= 0) return;
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    socket.emit('shoot', {
-        x: camera.position.x,
-        y: camera.position.y,
-        z: camera.position.z,
-        vx: direction.x * 1.5,
-        vy: direction.y * 1.5,
-        vz: direction.z * 1.5
+    socket.on('playerDisconnected', (id) => {
+        if (otherPlayers[id]) {
+            scene.remove(otherPlayers[id].group);
+            delete otherPlayers[id];
+        }
     });
-    currentAmmo--;
-    updateAmmoHUD();
-}
 
-// 入力イベント
-btnThrow.addEventListener('touchstart', (e) => { e.preventDefault(); shoot(); });
-btnThrow.addEventListener('mousedown', (e) => { e.preventDefault(); shoot(); });
-btnReload.addEventListener('touchstart', (e) => { e.preventDefault(); reloadWeapon(); });
-btnReload.addEventListener('click', reloadWeapon);
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') shoot();
-    if (e.code === 'KeyR') reloadWeapon();
-});
+    socket.on('playerDied', (data) => {
+        if (otherPlayers[data.id]) {
+            otherPlayers[data.id].group.visible = false;
+        }
+    });
 
-// --- Socket通信 ---
+    socket.on('playerMoved', (playerInfo) => {
+        if (otherPlayers[playerInfo.id]) {
+            otherPlayers[playerInfo.id].group.position.set(playerInfo.position.x, playerInfo.position.y, playerInfo.position.z);
+            otherPlayers[playerInfo.id].group.rotation.y = playerInfo.rotation.y;
 
-// プレイヤー更新
-socket.on('updatePlayerList', (serverPlayers) => {
-    for (const id in serverPlayers) {
-        if (id === socket.id) { myId = id; continue; }
-        if (!players[id]) {
-            const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
-            const mat = new THREE.MeshStandardMaterial({ color: serverPlayers[id].color });
-            const mesh = new THREE.Mesh(geo, mat);
-            scene.add(mesh);
-            players[id] = mesh;
+            const hpRatio = playerInfo.hp / MAX_PLAYER_HP;
+            if (otherPlayers[playerInfo.id].hpBar) {
+                otherPlayers[playerInfo.id].hpBar.scale.x = hpRatio;
+            }
+        }
+    });
+
+    function createPlayerAvatar(color) {
+        const playerGroup = new THREE.Group();
+        playerGroup.position.set(0, PLAYER_HEIGHT / 2, 10);
+
+        const skinMat = new THREE.MeshStandardMaterial({color: 0xffccaa});
+        const shirtMat = new THREE.MeshStandardMaterial({color: color || 0xffffff});
+        const pantsMat = new THREE.MeshStandardMaterial({color: 0x3333ff});
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), skinMat);
+        head.position.y = 1.5;
+        playerGroup.add(head);
+
+        const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.5), shirtMat);
+        body.position.y = 0.25;
+        playerGroup.add(body);
+
+        const arm1 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.5, 0.4), skinMat);
+        arm1.position.set(-0.7, 0.25, 0);
+        playerGroup.add(arm1);
+
+        const arm2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.5, 0.4), skinMat);
+        arm2.position.set(0.7, 0.25, 0);
+        playerGroup.add(arm2);
+
+        const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), pantsMat);
+        leg1.position.set(-0.25, -1, 0);
+        playerGroup.add(leg1);
+
+        const leg2 = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1, 0.5), pantsMat);
+        leg2.position.set(0.25, -1, 0);
+        playerGroup.add(leg2);
+
+        return playerGroup;
+    }
+
+    function addOtherPlayer(playerInfo) {
+        const playerGroup = createPlayerAvatar(playerInfo.color);
+        playerGroup.visible = !playerInfo.isDead;
+
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        context.font = 'Bold 40px Arial'; // Increased font size
+        context.fillStyle = 'white';
+        context.strokeStyle = 'black';
+        context.lineWidth = 2;
+        const textWidth = context.measureText(playerInfo.username).width;
+        canvas.width = textWidth;
+        canvas.height = 40;
+        context.font = 'Bold 40px Arial'; // Reset font after canvas resize
+        context.fillStyle = 'white';
+        context.strokeStyle = 'black';
+        context.lineWidth = 2;
+        context.strokeText(playerInfo.username, 0, 35);
+        context.fillText(playerInfo.username, 0, 35);
+
+        const texture = new THREE.CanvasTexture(canvas);
+
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        sprite.position.y = 2.8;
+        playerGroup.add(sprite);
+
+        const hpGroup = new THREE.Group();
+        hpGroup.position.y = 2.4;
+        const bgGeo = new THREE.PlaneGeometry(1.5, 0.2);
+        const bgMat = new THREE.MeshBasicMaterial({ color: 0x330000 });
+        hpGroup.add(new THREE.Mesh(bgGeo, bgMat));
+        const barGeo = new THREE.PlaneGeometry(1.5, 0.2);
+        barGeo.translate(0.75, 0, 0);
+        const barMat = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+        const hpBar = new THREE.Mesh(barGeo, barMat);
+        hpBar.position.x = -0.75;
+        hpGroup.add(hpBar);
+        playerGroup.add(hpGroup);
+
+        otherPlayers[playerInfo.id] = {
+            group: playerGroup,
+            hpBar: hpBar,
+            hpGroup: hpGroup
+        };
+        scene.add(playerGroup);
+    }
+
+    function updateTarget(targetState) {
+        let target = clientTargets[targetState.id];
+        if (!target) {
+            target = createTargetMesh();
+            clientTargets[targetState.id] = target;
+            scene.add(target.mesh);
+        }
+
+        if (targetState.active) {
+            target.mesh.visible = true;
+            target.mesh.position.set(targetState.position.x, targetState.position.y, targetState.position.z);
+            target.mesh.rotation.y = targetState.rotationY;
+
+            const hpRatio = targetState.hp / targetState.maxHp;
+            target.hpBar.scale.x = hpRatio;
+            target.hpGroup.lookAt(camera.position);
+
+        } else {
+            target.mesh.visible = false;
         }
     }
-    for (const id in players) {
-        if (!serverPlayers[id]) {
-            scene.remove(players[id]);
-            delete players[id];
-        }
-    }
-});
 
-socket.on('statePlayers', (serverPlayers) => {
-    for (const id in serverPlayers) {
-        if (players[id]) {
-            const p = serverPlayers[id];
-            players[id].position.set(p.x, p.y, p.z);
-            players[id].rotation.y = p.rotation;
+    socket.on('gameStateUpdate', (data) => {
+        // Update targets
+        for (const id in data.targets) {
+            updateTarget(data.targets[id]);
+        }
+
+        // Update minions
+        const receivedMinions = new Set();
+        for (const id in data.minions) {
+            const minionState = data.minions[id];
+            receivedMinions.add(id);
+            let minion = clientMinions[id];
+            if (!minion) {
+                const geo = new THREE.SphereGeometry(0.1, 8, 8); // Smaller sphere for bullets
+                const mat = new THREE.MeshStandardMaterial({ color: WEAPON_CONFIG.PISTOL.color });
+                minion = new THREE.Mesh(geo, mat);
+                clientMinions[id] = minion;
+                scene.add(minion);
+            }
+            minion.position.set(minionState.position.x, minionState.position.y, minionState.position.z);
         }
 
         // Remove old minions
@@ -305,26 +369,24 @@ function takePlayerDamage(dmg) {
     if (playerHP <= 0) {
         gameOver();
     }
-});
+}
 
-// 弾更新
-socket.on('spawnBullet', (b) => {
-    const geo = new THREE.SphereGeometry(0.15, 8, 8);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(b.x, b.y, b.z);
-    scene.add(mesh);
-    bullets[b.id] = mesh;
-});
-socket.on('stateBullets', (serverBullets) => {
-    serverBullets.forEach(b => {
-        if (bullets[b.id]) bullets[b.id].position.set(b.x, b.y, b.z);
-    });
-});
-socket.on('removeBullet', (id) => {
-    if (bullets[id]) {
-        scene.remove(bullets[id]);
-        delete bullets[id];
+function gameOver() {
+    isGameOver = true;
+    if (playerAvatar) playerAvatar.visible = false;
+    document.getElementById('final-score').innerText = score;
+    document.getElementById('game-over-screen').style.display = 'flex';
+}
+
+function resetGame() {
+    socket.emit('requestRespawn');
+    document.getElementById('game-over-screen').style.display = 'none';
+    isGameOver = false;
+    playerHP = MAX_PLAYER_HP;
+    updatePlayerHPUI();
+    if (playerAvatar) {
+        playerAvatar.visible = true;
+        playerAvatar.position.set(0, PLAYER_HEIGHT / 2, 10);
     }
 }
 
@@ -469,106 +531,67 @@ function setupControls() {
         messages.scrollTop = messages.scrollHeight;
     });
 
-    // 死んだ敵を削除
-    // (サーバー配列にないIDをローカルから消す)
-    const serverIds = serverMinions.map(m => m.id);
-    for (const id in minions) {
-        if (!serverIds.includes(id)) {
-            scene.remove(minions[id]);
-            delete minions[id];
-        }
-    }
-});
+    const hudToggleButton = document.getElementById('hud-toggle');
+    const hudContainer = document.getElementById('collapsible-hud');
 
-// スコア更新
-socket.on('updateScore', (score) => {
-    scoreVal.innerText = score;
-});
+    hudToggleButton.addEventListener('click', () => {
+        hudContainer.classList.toggle('collapsed');
+    });
+}
 
-// --- 移動制御 & ループ ---
-const keys = { w: false, a: false, s: false, d: false };
-const moveSpeed = 0.15;
-
-window.addEventListener('keydown', (e) => {
-    if(e.key === 'w') keys.w = true;
-    if(e.key === 'a') keys.a = true;
-    if(e.key === 's') keys.s = true;
-    if(e.key === 'd') keys.d = true;
-});
-window.addEventListener('keyup', (e) => {
-    if(e.key === 'w') keys.w = false;
-    if(e.key === 'a') keys.a = false;
-    if(e.key === 's') keys.s = false;
-    if(e.key === 'd') keys.d = false;
-});
-
-// ジョイスティック制御
-const joystickZone = document.getElementById('joystick-zone');
-const joystickKnob = document.getElementById('joystick-knob');
-let joyX = 0, joyY = 0, isDragging = false;
-
-joystickZone.addEventListener('touchstart', () => { isDragging = true; });
-joystickZone.addEventListener('touchend', () => { 
-    isDragging = false; 
-    joyX = 0; joyY = 0;
-    joystickKnob.style.transform = `translate(-50%, -50%)`;
-});
-joystickZone.addEventListener('touchmove', (e) => {
-    if (!isDragging) return;
-    const touch = e.touches[0];
-    const rect = joystickZone.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    const dx = touch.clientX - centerX;
-    const dy = touch.clientY - centerY;
-    const dist = Math.min(Math.sqrt(dx*dx + dy*dy), 50);
-    const angle = Math.atan2(dy, dx);
-    joyX = Math.cos(angle) * (dist / 50);
-    joyY = Math.sin(angle) * (dist / 50);
-    joystickKnob.style.transform = `translate(calc(-50% + ${Math.cos(angle)*dist}px), calc(-50% + ${Math.sin(angle)*dist}px))`;
-});
-
-// 視点移動
-const touchLookZone = document.getElementById('touch-look-zone');
-let lastTouchX = 0;
-touchLookZone.addEventListener('touchstart', (e) => { lastTouchX = e.touches[0].clientX; });
-touchLookZone.addEventListener('touchmove', (e) => {
-    const touchX = e.touches[0].clientX;
-    const deltaX = touchX - lastTouchX;
-    camera.rotation.y -= deltaX * 0.005;
-    lastTouchX = touchX;
-});
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
 
 function animate() {
     requestAnimationFrame(animate);
+    const time = performance.now();
+    const dt = Math.min((time - prevTime) / 1000, 0.1);
+    prevTime = time;
 
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    dir.y = 0; dir.normalize();
-    const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+    frames++;
+    if (time >= lastFPSTime + 1000) {
+        document.getElementById('fps-counter').innerText = `FPS: ${frames}`;
+        frames = 0;
+        lastFPSTime = time;
+    }
 
-    // PC移動
-    if (keys.w) camera.position.addScaledVector(dir, moveSpeed);
-    if (keys.s) camera.position.addScaledVector(dir, -moveSpeed);
-    if (keys.a) camera.position.addScaledVector(right, moveSpeed);
-    if (keys.d) camera.position.addScaledVector(right, -moveSpeed);
+    if (!isGameOver && playerAvatar) {
+        if (input.moveX !== 0 || input.moveY !== 0) {
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
+            const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
+            const moveDir = new THREE.Vector3();
+            moveDir.addScaledVector(forward, -input.moveY);
+            moveDir.addScaledVector(right, input.moveX);
+            moveDir.normalize();
 
-    // スマホ移動
-    if (joyY !== 0) camera.position.addScaledVector(dir, -joyY * moveSpeed);
-    if (joyX !== 0) camera.position.addScaledVector(right, -joyX * moveSpeed);
+            playerAvatar.position.addScaledVector(moveDir, PLAYER_SPEED * dt);
+            playerAvatar.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+        }
 
-    // 座標表示
-    document.getElementById('coordinates').innerText = 
-        `X: ${camera.position.x.toFixed(2)} Z: ${camera.position.z.toFixed(2)}`;
+        // First-person camera logic
+        camera.position.copy(playerAvatar.position);
+        camera.position.y += 1.5; // Raise camera to eye level
+        camera.rotation.set(camRotation.x, camRotation.y, 0);
 
-    // サーバー送信
-    if (socket.connected) {
-        socket.emit('playerInput', {
-            x: camera.position.x,
-            y: camera.position.y,
-            z: camera.position.z,
-            rotation: camera.rotation.y
+        socket.emit('playerMovement', {
+            position: playerAvatar.position,
+            rotation: { x: 0, y: camRotation.y, z: 0 } // Send camera rotation
         });
+
+        // Update coordinates UI
+        const coords = playerAvatar.position;
+        document.getElementById('coordinates').textContent =
+            `X: ${coords.x.toFixed(2)} Y: ${coords.y.toFixed(2)} Z: ${coords.z.toFixed(2)}`;
+    }
+
+    // Update other players' HP bars to face the camera
+    for (const id in otherPlayers) {
+        if (otherPlayers[id].hpGroup) {
+            otherPlayers[id].hpGroup.lookAt(camera.position);
+        }
     }
 
     renderer.render(scene, camera);
