@@ -10,15 +10,22 @@ let playerHP = 100;
 const MAX_PLAYER_HP = 100;
 let isGameOver = false;
 let playerAvatar;
-let ammoInMagazine = 10;
-let pistol;
+let weapons = {};
+let currentWeapon = 'pistol';
+let playerWeaponsState = {};
 
 const WEAPON_CONFIG = {
-    PISTOL: {
+    'pistol': {
         name: 'Pistol',
-        color: 0xffffff,
-        damage: 5,
+        color: 0xcccccc,
+        magazineSize: 10,
         uiColor: 'rgba(200, 200, 200, 0.6)'
+    },
+    'rifle': {
+        name: 'Rifle',
+        color: 0x999999,
+        magazineSize: 30,
+        uiColor: 'rgba(150, 150, 150, 0.6)'
     }
 };
 
@@ -69,9 +76,12 @@ function init() {
     camera.position.set(0, 5, 18); // Set a stable initial camera position
     camera.rotation.order = "YXZ";
 
-    pistol = createPistol();
-    camera.add(pistol);
-    scene.add(camera); // Add camera to scene so pistol is visible
+    weapons.pistol = createPistol();
+    weapons.rifle = createRifle();
+    weapons.rifle.visible = false;
+    camera.add(weapons.pistol);
+    camera.add(weapons.rifle);
+    scene.add(camera); // Add camera to scene so weapons are visible
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -95,13 +105,11 @@ function init() {
         if (username) {
             const color = document.querySelector('.color-box.selected').dataset.color;
             socket.emit('initPlayer', { username, color });
-            playerAvatar = createPlayerAvatar(color);
-            playerAvatar.visible = false; // Hide self avatar for first-person
-            scene.add(playerAvatar);
 
+            // The server will send back the full player state, which we'll use
+            // to initialize everything in the 'currentPlayers' or a new 'initAck' event
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
-            updateHUD();
             updatePlayerHPUI();
             setupControls();
         }
@@ -123,7 +131,20 @@ function init() {
 
     socket.on('currentPlayers', (players) => {
         Object.keys(players).forEach((id) => {
-            if (players[id].id !== socket.id) {
+            if (players[id].id === socket.id) {
+                const myPlayer = players[id];
+                playerWeaponsState = myPlayer.weapons;
+                currentWeapon = myPlayer.currentWeapon;
+                playerAvatar = createPlayerAvatar(myPlayer.color);
+                playerAvatar.visible = false;
+                scene.add(playerAvatar);
+
+                for (const weaponName in weapons) {
+                    weapons[weaponName].visible = (weaponName === currentWeapon);
+                }
+
+                updateHUD();
+            } else {
                 addOtherPlayer(players[id]);
             }
         });
@@ -285,7 +306,7 @@ function init() {
             let minion = clientMinions[id];
             if (!minion) {
                 const geo = new THREE.SphereGeometry(0.1, 8, 8); // Smaller sphere for bullets
-                const mat = new THREE.MeshStandardMaterial({ color: WEAPON_CONFIG.PISTOL.color });
+                const mat = new THREE.MeshStandardMaterial({ color: 0x333333 }); // Generic bullet color
                 minion = new THREE.Mesh(geo, mat);
                 clientMinions[id] = minion;
                 scene.add(minion);
@@ -308,7 +329,18 @@ function init() {
     });
 
     socket.on('weaponReloaded', (data) => {
-        ammoInMagazine = data.ammoInMagazine;
+        if (playerWeaponsState[data.weapon]) {
+            playerWeaponsState[data.weapon].ammoInMagazine = data.ammoInMagazine;
+            updateHUD();
+        }
+    });
+
+    socket.on('weaponSwitched', (data) => {
+        currentWeapon = data.currentWeapon;
+        // Toggle visibility
+        for (const weaponName in weapons) {
+            weapons[weaponName].visible = (weaponName === currentWeapon);
+        }
         updateHUD();
     });
 
@@ -391,12 +423,27 @@ function resetGame() {
 }
 
 function updateHUD() {
-    const weapon = WEAPON_CONFIG.PISTOL;
-    document.getElementById('weapon-name').innerText = weapon.name;
-    document.getElementById('weapon-ammo').innerHTML = `${ammoInMagazine} <span id="ammo-total">/ ∞</span>`;
+    if (!playerWeaponsState.pistol || !playerWeaponsState.rifle) return;
+
+    const primaryWeapon = currentWeapon;
+    const secondaryWeapon = (currentWeapon === 'pistol') ? 'rifle' : 'pistol';
+
+    // Update Primary HUD
+    const primaryConfig = WEAPON_CONFIG[primaryWeapon];
+    const primaryState = playerWeaponsState[primaryWeapon];
+    document.getElementById('weapon-name-primary').innerText = primaryConfig.name;
+    document.getElementById('weapon-ammo-primary').innerHTML = `${primaryState.ammoInMagazine} <span class="ammo-total">/ ∞</span>`;
+
+    // Update Secondary HUD
+    const secondaryConfig = WEAPON_CONFIG[secondaryWeapon];
+    const secondaryState = playerWeaponsState[secondaryWeapon];
+    document.getElementById('weapon-name-secondary').innerText = secondaryConfig.name;
+    document.getElementById('weapon-ammo-secondary').innerHTML = `${secondaryState.ammoInMagazine} <span class="ammo-total">/ ∞</span>`;
+
+    // Update Fire Button
     const fireBtn = document.getElementById('btn-throw');
-    fireBtn.style.background = weapon.uiColor;
-    if (ammoInMagazine > 0) {
+    fireBtn.style.background = primaryConfig.uiColor;
+    if (primaryState.ammoInMagazine > 0) {
         fireBtn.classList.remove('empty');
         fireBtn.innerText = "FIRE";
     } else {
@@ -406,6 +453,11 @@ function updateHUD() {
 }
 
 function setupControls() {
+    document.getElementById('weapon-hud-secondary').addEventListener('click', () => {
+        const secondaryWeapon = (currentWeapon === 'pistol') ? 'rifle' : 'pistol';
+        socket.emit('switchWeapon', secondaryWeapon);
+    });
+
     const joystickZone = document.getElementById('joystick-zone');
     const joystickKnob = document.getElementById('joystick-knob');
     let joyStartX = 0, joyStartY = 0;
@@ -476,17 +528,19 @@ function setupControls() {
     lookZone.addEventListener('touchend', endLook, { passive: false });
     lookZone.addEventListener('touchcancel', endLook, { passive: false });
 
-    const throwBtn = document.getElementById('btn-throw');
-    const throwAction = (e) => {
+    const fireBtn = document.getElementById('btn-throw');
+    const fireAction = (e) => {
         e.preventDefault(); e.stopPropagation();
-        if(isGameOver || ammoInMagazine <= 0) return;
+        if(isGameOver || !playerWeaponsState[currentWeapon] || playerWeaponsState[currentWeapon].ammoInMagazine <= 0) return;
 
-        ammoInMagazine--;
+        playerWeaponsState[currentWeapon].ammoInMagazine--;
         updateHUD();
+
+        const activeWeaponModel = weapons[currentWeapon];
 
         // Muzzle flash
         const muzzleFlash = new THREE.PointLight(0xffcc00, 10, 5);
-        muzzleFlash.position.set(0.5, -0.4, -2);
+        muzzleFlash.position.set(activeWeaponModel.position.x, activeWeaponModel.position.y, activeWeaponModel.position.z - 1.0); // Approx barrel end
         camera.add(muzzleFlash);
         setTimeout(() => camera.remove(muzzleFlash), 50);
 
@@ -494,16 +548,16 @@ function setupControls() {
         camera.getWorldDirection(camDir);
 
         const startPos = new THREE.Vector3();
-        pistol.getWorldPosition(startPos);
-        startPos.addScaledVector(camDir, 0.5); // Start the bullet slightly in front of the gun
+        activeWeaponModel.getWorldPosition(startPos);
+        startPos.addScaledVector(camDir, 0.5);
 
         socket.emit('fire', {
-            type: 'NORMAL', // Server expects 'NORMAL'
+            type: currentWeapon.toUpperCase(),
             position: startPos,
             direction: camDir
         });
     };
-    throwBtn.addEventListener('touchstart', throwAction); throwBtn.addEventListener('mousedown', throwAction);
+    fireBtn.addEventListener('touchstart', fireAction); fireBtn.addEventListener('mousedown', fireAction);
 
     const reloadBtn = document.getElementById('btn-reload');
     const reloadAction = (e) => {
@@ -615,4 +669,40 @@ function createPistol() {
     pistolGroup.rotation.y = -0.2;
 
     return pistolGroup;
+}
+
+function createRifle() {
+    const rifleGroup = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
+
+    // Main body and barrel
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 2.5), bodyMat);
+    rifleGroup.add(body);
+
+    // Stock
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.4, 0.6), woodMat);
+    stock.position.set(0, -0.1, 1.5);
+    rifleGroup.add(stock);
+
+    // Handle
+    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.2), bodyMat);
+    handle.position.set(0, -0.2, 0.5);
+    handle.rotation.x = 0.3;
+    rifleGroup.add(handle);
+
+    // Magazine
+    const magazine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.4), bodyMat);
+    magazine.position.set(0, -0.3, 0);
+    rifleGroup.add(magazine);
+
+    // Scope
+    const scope = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.3), bodyMat);
+    scope.position.y = 0.25;
+    rifleGroup.add(scope);
+
+    rifleGroup.position.set(0.6, -0.5, -1.5);
+    rifleGroup.rotation.y = -0.1;
+
+    return rifleGroup;
 }

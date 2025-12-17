@@ -18,8 +18,15 @@ const minions = {};
 
 // Game constants
 const NUM_TARGETS = 3;
-const TYPES = {
-    NORMAL: { dmg: 5 }, // Pistol damage
+const WEAPONS = {
+    'pistol': {
+        damage: 5,
+        magazineSize: 10,
+    },
+    'rifle': {
+        damage: 10,
+        magazineSize: 30,
+    }
 };
 
 class ServerTarget {
@@ -132,7 +139,7 @@ setInterval(() => {
                     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
                     if (dist < 2.0) {
-                        target.hit(TYPES.NORMAL.dmg, minion.ownerId);
+                        target.hit(minion.damage, minion.ownerId);
                         hit = true;
                     }
                 }
@@ -148,7 +155,7 @@ setInterval(() => {
                     const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
 
                     if (dist < 2.0) { // Player hitbox
-                        player.hp -= TYPES.NORMAL.dmg;
+                        player.hp -= minion.damage;
 
                         if (players[minion.ownerId]) {
                             players[minion.ownerId].score += 10;
@@ -168,7 +175,7 @@ setInterval(() => {
                             }
                         }
 
-                        io.emit('playerDamaged', { id: playerId, damage: TYPES.NORMAL.dmg, hp: player.hp });
+                        io.emit('playerDamaged', { id: playerId, damage: minion.damage, hp: player.hp });
 
                         hit = true;
                     }
@@ -206,9 +213,12 @@ io.on('connection', (socket) => {
             score: 0,
             hp: 100,
             maxHp: 100,
-            ammoInMagazine: 10,
-            magazineSize: 10,
             isDead: false,
+            weapons: {
+                pistol: { ammoInMagazine: WEAPONS.pistol.magazineSize },
+                rifle: { ammoInMagazine: WEAPONS.rifle.magazineSize }
+            },
+            currentWeapon: 'pistol',
         };
         socket.emit('updateScore', { score: players[socket.id].score });
 
@@ -246,21 +256,28 @@ io.on('connection', (socket) => {
 
     socket.on('fire', (data) => {
         const player = players[socket.id];
-        if (player && !player.isDead && player.ammoInMagazine > 0) {
-            player.ammoInMagazine--;
-            const minionId = `minion_${socket.id}_${Date.now()}`;
-            minions[minionId] = {
-                id: minionId,
-                ownerId: socket.id,
-                type: data.type,
-                state: 'airborne', // New state property
-                position: { ...data.position },
-                velocity: {
-                    x: data.direction.x * 80, // Increased velocity
-                    y: data.direction.y * 80, // Flatter trajectory
-                    z: data.direction.z * 80,
-                }
-            };
+        if (player && !player.isDead) {
+            const currentWeapon = player.currentWeapon;
+            const weaponStats = WEAPONS[currentWeapon];
+            const weapon = player.weapons[currentWeapon];
+
+            if (weapon && weapon.ammoInMagazine > 0) {
+                weapon.ammoInMagazine--;
+                const minionId = `minion_${socket.id}_${Date.now()}`;
+                minions[minionId] = {
+                    id: minionId,
+                    ownerId: socket.id,
+                    type: data.type,
+                    damage: weaponStats.damage,
+                    state: 'airborne',
+                    position: { ...data.position },
+                    velocity: {
+                        x: data.direction.x * 80,
+                        y: data.direction.y * 80,
+                        z: data.direction.z * 80,
+                    }
+                };
+            }
         }
     });
 
@@ -277,8 +294,9 @@ io.on('connection', (socket) => {
             player.isDead = false;
             player.hp = player.maxHp;
             player.position = { x: 0, y: 3.0, z: 10 };
-            player.ammoInMagazine = player.magazineSize;
-            // Reset score and inventory on respawn
+            player.weapons.pistol.ammoInMagazine = WEAPONS.pistol.magazineSize;
+            player.weapons.rifle.ammoInMagazine = WEAPONS.rifle.magazineSize;
+            player.currentWeapon = 'pistol';
             player.score = 0;
             socket.emit('updateScore', { score: player.score });
 
@@ -289,8 +307,21 @@ io.on('connection', (socket) => {
     socket.on('reloadWeapon', () => {
         const player = players[socket.id];
         if (player && !player.isDead) {
-            player.ammoInMagazine = player.magazineSize;
-            socket.emit('weaponReloaded', { ammoInMagazine: player.ammoInMagazine });
+            const currentWeapon = player.currentWeapon;
+            const weaponStats = WEAPONS[currentWeapon];
+            player.weapons[currentWeapon].ammoInMagazine = weaponStats.magazineSize;
+            socket.emit('weaponReloaded', {
+                weapon: currentWeapon,
+                ammoInMagazine: player.weapons[currentWeapon].ammoInMagazine
+            });
+        }
+    });
+
+    socket.on('switchWeapon', (weaponName) => {
+        const player = players[socket.id];
+        if (player && WEAPONS[weaponName]) {
+            player.currentWeapon = weaponName;
+            socket.emit('weaponSwitched', { currentWeapon: player.currentWeapon });
         }
     });
 
