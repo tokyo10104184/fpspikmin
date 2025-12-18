@@ -1,6 +1,9 @@
 import * as THREE from 'https://unpkg.com/three@0.150.0/build/three.module.js';
 
-let camera, scene, renderer;
+let camera, scene, renderer, listener;
+const audioLoader = new THREE.AudioLoader();
+const sounds = {};
+
 let prevTime = performance.now();
 let frames = 0;
 let lastFPSTime = prevTime;
@@ -43,6 +46,62 @@ const clientMinions = {};
 let socket;
 const otherPlayers = {};
 
+const translations = {
+    en: {
+        "title": "MINION FPS: ONLINE",
+        "subtitle": "Enter the world of minions and conquer your enemies.",
+        "choose-color": "Choose your avatar color:",
+        "connecting": "Connecting...",
+        "play": "PLAY",
+        "leaderboard": "Leaderboard",
+        "toggle-hud": "Toggle HUD",
+        "rifle": "Rifle",
+        "pistol": "Pistol",
+        "fire": "FIRE",
+        "reload": "RELOAD",
+        "reloading": "RELOADING!",
+        "game-over": "GAME OVER",
+        "score": "Score: $",
+        "retry": "RETRY",
+        "username-placeholder": "Enter username",
+        "chat-placeholder": "Type a message..."
+    },
+    ja: {
+        "title": "ミニオンFPS：オンライン",
+        "subtitle": "ミニオンの世界に入り、敵を征服せよ。",
+        "choose-color": "アバターの色を選択:",
+        "connecting": "接続中...",
+        "play": "プレイ",
+        "leaderboard": "リーダーボード",
+        "toggle-hud": "HUD切り替え",
+        "rifle": "ライフル",
+        "pistol": "ピストル",
+        "fire": "射撃",
+        "reload": "リロード",
+        "reloading": "リロード中!",
+        "game-over": "ゲームオーバー",
+        "score": "スコア: $",
+        "retry": "リトライ",
+        "username-placeholder": "ユーザー名を入力",
+        "chat-placeholder": "メッセージを入力..."
+    }
+};
+
+function setLanguage(lang) {
+    document.querySelectorAll('[data-lang-key]').forEach(el => {
+        const key = el.dataset.langKey;
+        if (translations[lang] && translations[lang][key]) {
+            if (key === 'score') {
+                el.innerHTML = translations[lang][key] + '<span id="final-score">0</span>';
+            } else {
+                el.textContent = translations[lang][key];
+            }
+        }
+    });
+    document.getElementById('username-input').placeholder = translations[lang]['username-placeholder'];
+    document.getElementById('chat-input').placeholder = translations[lang]['chat-placeholder'];
+}
+
 init();
 
 function init() {
@@ -51,8 +110,18 @@ function init() {
     socket.on('connect', () => {
         const playButton = document.getElementById('play-button');
         playButton.disabled = false;
-        playButton.textContent = 'PLAY';
+        playButton.textContent = translations[document.getElementById('language-selector').value]['play'];
     });
+
+    document.getElementById('language-selector').addEventListener('change', (e) => {
+        setLanguage(e.target.value);
+        const playButton = document.getElementById('play-button');
+        if (!playButton.disabled) {
+            playButton.textContent = translations[e.target.value]['play'];
+        }
+    });
+
+    setLanguage('ja');
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
@@ -75,6 +144,32 @@ function init() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 5, 18); // Set a stable initial camera position
     camera.rotation.order = "YXZ";
+
+    listener = new THREE.AudioListener();
+    camera.add(listener);
+
+    // Sound Manager
+    function loadSound(name, path) {
+        const sound = new THREE.Audio(listener);
+        audioLoader.load(path, function(buffer) {
+            sound.setBuffer(buffer);
+            sound.setLoop(false);
+            sound.setVolume(0.5);
+            sounds[name] = sound;
+        });
+    }
+
+    // Load sounds (placeholder paths)
+    loadSound('pistol_fire', 'assets/sounds/pistol_fire.wav');
+    loadSound('rifle_fire', 'assets/sounds/rifle_fire.wav');
+    loadSound('pistol_reload', 'assets/sounds/pistol_reload.wav');
+    loadSound('rifle_reload', 'assets/sounds/rifle_reload.wav');
+    loadSound('take_damage', 'assets/sounds/take_damage.wav');
+    loadSound('deal_damage', 'assets/sounds/deal_damage.wav');
+    loadSound('player_kill', 'assets/sounds/player_kill.wav');
+    loadSound('player_death', 'assets/sounds/player_death.wav');
+    loadSound('start_music', 'assets/sounds/start_music.mp3');
+
 
     weapons.pistol = createPistol();
     weapons.rifle = createRifle();
@@ -103,6 +198,10 @@ function init() {
     document.getElementById('play-button').addEventListener('click', () => {
         const username = document.getElementById('username-input').value;
         if (username) {
+            if (sounds.start_music && !sounds.start_music.isPlaying) {
+                sounds.start_music.play();
+            }
+
             const color = document.querySelector('.color-box.selected').dataset.color;
             socket.emit('initPlayer', { username, color });
 
@@ -120,7 +219,13 @@ function init() {
     socket.on('playerDamaged', (data) => {
         if (data.id === socket.id) {
             takePlayerDamage(data.damage);
-        } else if (otherPlayers[data.id]) {
+        } else {
+            if (data.attackerId === socket.id) {
+                if (sounds.deal_damage) sounds.deal_damage.play();
+            }
+        }
+
+        if (otherPlayers[data.id]) {
             const player = otherPlayers[data.id];
             const hpRatio = data.hp / MAX_PLAYER_HP;
             if (player.hpBar) {
@@ -170,6 +275,9 @@ function init() {
     });
 
     socket.on('playerDied', (data) => {
+        if (data.killerId === socket.id) {
+            if (sounds.player_kill) sounds.player_kill.play();
+        }
         if (otherPlayers[data.id]) {
             otherPlayers[data.id].group.visible = false;
         }
@@ -394,6 +502,8 @@ function takePlayerDamage(dmg) {
     playerHP -= dmg;
     updatePlayerHPUI();
 
+    if (sounds.take_damage) sounds.take_damage.play();
+
     const overlay = document.getElementById('damage-overlay');
     overlay.style.opacity = 0.5;
     setTimeout(() => { overlay.style.opacity = 0; }, 100);
@@ -405,6 +515,7 @@ function takePlayerDamage(dmg) {
 
 function gameOver() {
     isGameOver = true;
+    if (sounds.player_death) sounds.player_death.play();
     if (playerAvatar) playerAvatar.visible = false;
     document.getElementById('final-score').innerText = score;
     document.getElementById('game-over-screen').style.display = 'flex';
@@ -529,14 +640,25 @@ function setupControls() {
     lookZone.addEventListener('touchcancel', endLook, { passive: false });
 
     const fireBtn = document.getElementById('btn-throw');
-    const fireAction = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        if(isGameOver || !playerWeaponsState[currentWeapon] || playerWeaponsState[currentWeapon].ammoInMagazine <= 0) return;
+    let fireInterval = null;
+
+    const fireAction = () => {
+        if(isGameOver || !playerWeaponsState[currentWeapon] || playerWeaponsState[currentWeapon].ammoInMagazine <= 0) {
+            if (fireInterval) {
+                clearInterval(fireInterval);
+                fireInterval = null;
+            }
+            return;
+        }
+
+        if (currentWeapon === 'pistol' && sounds.pistol_fire) sounds.pistol_fire.play();
+        if (currentWeapon === 'rifle' && sounds.rifle_fire) sounds.rifle_fire.play();
 
         playerWeaponsState[currentWeapon].ammoInMagazine--;
         updateHUD();
 
         const activeWeaponModel = weapons[currentWeapon];
+        playRecoilAnimation(activeWeaponModel);
 
         // Muzzle flash
         const muzzleFlash = new THREE.PointLight(0xffcc00, 10, 5);
@@ -557,12 +679,42 @@ function setupControls() {
             direction: camDir
         });
     };
-    fireBtn.addEventListener('touchstart', fireAction); fireBtn.addEventListener('mousedown', fireAction);
+
+    const startFiring = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (fireInterval) return;
+
+        if (currentWeapon === 'rifle') {
+            fireAction(); // Fire immediately
+            fireInterval = setInterval(fireAction, 150); // Fire every 150ms
+        } else {
+            fireAction(); // Pistol fires once
+        }
+    };
+
+    const stopFiring = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if (fireInterval) {
+            clearInterval(fireInterval);
+            fireInterval = null;
+        }
+    };
+
+    fireBtn.addEventListener('touchstart', startFiring);
+    fireBtn.addEventListener('mousedown', startFiring);
+    fireBtn.addEventListener('touchend', stopFiring);
+    fireBtn.addEventListener('mouseup', stopFiring);
+    fireBtn.addEventListener('touchcancel', stopFiring);
 
     const reloadBtn = document.getElementById('btn-reload');
     const reloadAction = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(isGameOver) return;
+
+        playReloadAnimation(weapons[currentWeapon]);
+        if (currentWeapon === 'pistol' && sounds.pistol_reload) sounds.pistol_reload.play();
+        if (currentWeapon === 'rifle' && sounds.rifle_reload) sounds.rifle_reload.play();
+
         socket.emit('reloadWeapon');
     };
     reloadBtn.addEventListener('touchstart', reloadAction);
@@ -613,7 +765,11 @@ function animate() {
     }
 
     if (!isGameOver && playerAvatar) {
+        const walkingSpeed = 10;
         if (input.moveX !== 0 || input.moveY !== 0) {
+            const bobbleAmount = Math.sin(time / 100) * 0.03;
+            weapons[currentWeapon].position.y += bobbleAmount;
+
             const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
             const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), camRotation.y);
             const moveDir = new THREE.Vector3();
@@ -669,6 +825,26 @@ function createPistol() {
     pistolGroup.rotation.y = -0.2;
 
     return pistolGroup;
+}
+
+function playRecoilAnimation(weapon) {
+    const recoilAmount = 0.1;
+    const recoilDuration = 50; // ms
+    const initialPos = weapon.position.z;
+    weapon.position.z += recoilAmount;
+    setTimeout(() => {
+        weapon.position.z = initialPos;
+    }, recoilDuration);
+}
+
+function playReloadAnimation(weapon) {
+    const reloadDrop = 0.5;
+    const reloadDuration = 300; // ms
+    const initialPos = weapon.position.y;
+    weapon.position.y -= reloadDrop;
+    setTimeout(() => {
+        weapon.position.y = initialPos;
+    }, reloadDuration);
 }
 
 function createRifle() {
