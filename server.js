@@ -22,10 +22,12 @@ const WEAPONS = {
     'pistol': {
         damage: 5,
         magazineSize: 10,
+        fireRate: 500 // ms between shots
     },
     'rifle': {
         damage: 10,
         magazineSize: 30,
+        fireRate: 150 // ms between shots
     }
 };
 
@@ -166,7 +168,7 @@ setInterval(() => {
                         if (player.hp <= 0) {
                             player.hp = 0;
                             player.isDead = true;
-                            io.emit('playerDied', { id: playerId });
+                            io.emit('playerDied', { id: playerId, killerId: minion.ownerId });
 
                             if (players[minion.ownerId]) {
                                 players[minion.ownerId].score += 50; // Bonus for a kill
@@ -175,7 +177,7 @@ setInterval(() => {
                             }
                         }
 
-                        io.emit('playerDamaged', { id: playerId, damage: minion.damage, hp: player.hp });
+                        io.emit('playerDamaged', { id: playerId, damage: minion.damage, hp: player.hp, attackerId: minion.ownerId });
 
                         hit = true;
                     }
@@ -219,6 +221,7 @@ io.on('connection', (socket) => {
                 rifle: { ammoInMagazine: WEAPONS.rifle.magazineSize }
             },
             currentWeapon: 'pistol',
+            lastFireTime: 0,
         };
         socket.emit('updateScore', { score: players[socket.id].score });
 
@@ -257,11 +260,13 @@ io.on('connection', (socket) => {
     socket.on('fire', (data) => {
         const player = players[socket.id];
         if (player && !player.isDead) {
+            const now = Date.now();
             const currentWeapon = player.currentWeapon;
             const weaponStats = WEAPONS[currentWeapon];
             const weapon = player.weapons[currentWeapon];
 
-            if (weapon && weapon.ammoInMagazine > 0) {
+            if (weapon && weapon.ammoInMagazine > 0 && (now - player.lastFireTime) > weaponStats.fireRate) {
+                player.lastFireTime = now;
                 weapon.ammoInMagazine--;
                 const minionId = `minion_${socket.id}_${Date.now()}`;
                 minions[minionId] = {

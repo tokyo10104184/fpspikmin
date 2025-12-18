@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Mobile Minion FPS: Enemy Attack</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; overflow: hidden; font-family: sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body { margin: 0; overflow: hidden; font-family: 'Noto Sans JP', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
@@ -292,22 +295,22 @@
         <div id="fps-counter">FPS: 0</div>
         <div id="coordinates">X: 0.00 Y: 0.00 Z: 0.00</div>
         <div id="leaderboard">
-            <h2>Leaderboard</h2>
+            <h2 data-lang-key="leaderboard">リーダーボード</h2>
             <ol id="leaderboard-list"></ol>
         </div>
 
         <div id="score-board">$<span id="score-val">0</span></div>
 
-        <button id="hud-toggle">Toggle HUD</button>
+        <button id="hud-toggle" data-lang-key="toggle-hud">HUD切り替え</button>
         <div id="collapsible-hud">
             <div id="weapon-hud-container">
                 <div id="weapon-hud-secondary" class="weapon-hud">
                     <div id="weapon-ammo-secondary" class="weapon-ammo">30 <span class="ammo-total">/ ∞</span></div>
-                    <div id="weapon-name-secondary" class="weapon-name">Rifle</div>
+                    <div id="weapon-name-secondary" class="weapon-name" data-lang-key="rifle">ライフル</div>
                 </div>
                 <div id="weapon-hud-primary" class="weapon-hud">
                     <div id="weapon-ammo-primary" class="weapon-ammo">10 <span class="ammo-total">/ ∞</span></div>
-                    <div id="weapon-name-primary" class="weapon-name">Pistol</div>
+                    <div id="weapon-name-primary" class="weapon-name" data-lang-key="pistol">ピストル</div>
                 </div>
             </div>
 
@@ -319,38 +322,44 @@
 
             <div id="joystick-zone" class="control-ui"><div id="joystick-knob"></div></div>
             <div id="touch-look-zone" class="control-ui"></div>
-            <div id="btn-throw" class="control-ui">FIRE</div>
-            <div id="btn-reload" class="control-ui">RELOAD</div>
+            <div id="btn-throw" class="control-ui" data-lang-key="fire">射撃</div>
+            <div id="btn-reload" class="control-ui" data-lang-key="reload">リロード</div>
 
             <div id="chat-ui">
                 <div id="chat-messages"></div>
-                <input type="text" id="chat-input" placeholder="Type a message...">
+                <input type="text" id="chat-input" placeholder="メッセージを入力...">
             </div>
         </div>
 
-        <div id="reload-msg">RECALLING!</div>
+        <div id="reload-msg" data-lang-key="reloading">リロード中!</div>
         <div id="crosshair"></div>
     </div>
 
     <div id="start-screen">
-        <h1>MINION FPS: ONLINE</h1>
-        <p>Enter the world of minions and conquer your enemies.</p>
-        <input type="text" id="username-input" placeholder="Enter username">
+        <div id="language-selector-container">
+            <select id="language-selector">
+                <option value="ja">日本語</option>
+                <option value="en">English</option>
+            </select>
+        </div>
+        <h1 data-lang-key="title">ミニオンFPS：オンライン</h1>
+        <p data-lang-key="subtitle">ミニオンの世界に入り、敵を征服せよ。</p>
+        <input type="text" id="username-input" placeholder="ユーザー名を入力">
         <div id="color-selector">
-            <p>Choose your avatar color:</p>
+            <p data-lang-key="choose-color">アバターの色を選択:</p>
             <div class="color-box selected" style="background-color: #ff0000;" data-color="#ff0000"></div>
             <div class="color-box" style="background-color: #00ff00;" data-color="#00ff00"></div>
             <div class="color-box" style="background-color: #0000ff;" data-color="#0000ff"></div>
             <div class="color-box" style="background-color: #ffff00;" data-color="#ffff00"></div>
             <div class="color-box" style="background-color: #ff00ff;" data-color="#ff00ff"></div>
         </div>
-        <button id="play-button" disabled>Connecting...</button>
+        <button id="play-button" disabled data-lang-key="connecting">接続中...</button>
     </div>
 
     <div id="game-over-screen">
-        <div style="font-size: 40px; color: red; font-weight: bold;">GAME OVER</div>
-        <div style="margin-top: 10px;">Score: $<span id="final-score">0</span></div>
-        <button id="retry-btn">RETRY</button>
+        <div style="font-size: 40px; color: red; font-weight: bold;" data-lang-key="game-over">ゲームオーバー</div>
+        <div style="margin-top: 10px;" data-lang-key="score">スコア: $<span id="final-score">0</span></div>
+        <button id="retry-btn" data-lang-key="retry">リトライ</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
